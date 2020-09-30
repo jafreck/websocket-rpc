@@ -1,0 +1,8 @@
+aiohttp
+aiohttp[speedups]
+pytest
+protobuf
+pylint
+pytest
+pytest-aiohttp
+black

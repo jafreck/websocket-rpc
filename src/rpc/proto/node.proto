@@ -1,0 +1,18 @@
+// generate: protoc -I=src/rpc/proto --python_out=./src/rpc/proto/gen src/rpc/proto/node.proto
+
+syntax = "proto2";
+
+package node;
+
+
+enum Direction {
+  ServerToNode = 1;
+  NodeToServer = 2;
+}
+
+message NodeMessage {
+  required int32 id = 1;
+  required Direction direction = 2;
+
+  optional bytes bytes = 100;
+}
