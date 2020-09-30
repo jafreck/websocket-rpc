@@ -29,13 +29,14 @@ class WebsocketClient:
         except:
             pass
 
-
     async def connect(self):
         print(f"connecting to {self.connect_address}")
         try:
             self.ws = await self.session.ws_connect(self.connect_address)
         except Exception as ex:
-            raise ConnectionError(f"Exception caught connecting to {self.connect_address}: {ex}")
+            raise ConnectionError(
+                f"Exception caught connecting to {self.connect_address}: {ex}"
+            )
 
     async def send_str(self, msg: str):
         # TODO: check connection status

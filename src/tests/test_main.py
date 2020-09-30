@@ -12,8 +12,8 @@ from aiohttp import WSMsgType, request, web
 
 # TODO: not sure why pytest is complaining so much about imports,
 # but changing sys.path before local imports fixes the issue for now
-sys.path.append(os.path.realpath(os.path.dirname(__file__)+"/.."))
-sys.path.append(os.path.realpath(os.path.dirname(__file__)+"/../rpc"))
+sys.path.append(os.path.realpath(os.path.dirname(__file__) + "/.."))
+sys.path.append(os.path.realpath(os.path.dirname(__file__) + "/../rpc"))
 
 import rpc.client
 import rpc.main
@@ -28,6 +28,7 @@ def async_wrapper(func):
         future = coro(*args, **kwargs)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(future)
+
     return wrapper
 
 
@@ -57,9 +58,9 @@ def construct_tls12_restrictive_ssl_context() -> ssl.SSLContext:
     context.options |= ssl.OP_NO_SSLv3
     return context
 
+
 def construct_ssl_context(
-        certpath: str,
-        client_certpath: Optional[str] = None
+    certpath: str, client_certpath: Optional[str] = None
 ) -> ssl.SSLContext:
     """Construct ssl context to be used for server/client communications
 
@@ -76,16 +77,19 @@ def construct_ssl_context(
     #     cafile=client_certpath)
     return context
 
+
 async def run_test_server(host: str, port: int, ssl_context: ssl.SSLContext = None):
     print("running test server")
     server = rpc.main.WebsocketServer(host=host, port=port, ssl_context=ssl_context)
     await server.start([rpc.server.Route("/ws", websocket_test_handler)])
     print("test server shutting down")
 
+
 async def connect_test_client() -> rpc.client.WebsocketClient:
-    client = rpc.main.WebsocketClient('http://127.0.0.1:1234/ws')
+    client = rpc.main.WebsocketClient("http://127.0.0.1:1234/ws")
     await client.connect()
     return client
+
 
 async def test_simple_client_server_no_ssl():
     await run_test_server(host="127.0.0.1", port=1234, ssl_context=None)

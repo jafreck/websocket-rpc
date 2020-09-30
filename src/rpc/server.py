@@ -3,16 +3,18 @@ import asyncio
 import ssl
 import sys
 from enum import Enum
-from typing import Callable, Optional, NamedTuple, List
+from typing import Callable, List, NamedTuple, Optional
 
 import aiohttp
 from aiohttp import WSMsgType, request, web
 
 import proto.gen.node_pb2
 
+
 class Route(NamedTuple):
     path: str
     handler: Callable[[web.Request], web.WebSocketResponse]
+
 
 class WebsocketServer:
     def __init__(self, host: str, port: int, ssl_context: ssl.SSLContext = None):
@@ -21,7 +23,6 @@ class WebsocketServer:
         self.ssl_context = ssl_context  # TODO: impl ssl
         self.app = web.Application()
         self.runner = web.AppRunner(self.app)
-
 
     async def start(self, routes: List[Route]):
         for route in routes:
@@ -45,4 +46,3 @@ class WebsocketServer:
                 await asyncio.sleep(3600)  # sleep forever by 1 hour intervals
         finally:
             await self.runner.cleanup()
-
