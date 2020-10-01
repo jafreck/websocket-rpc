@@ -11,7 +11,7 @@ enum Direction {
 }
 
 message NodeMessage {
-  required int32 id = 1;
+  required string id = 1;
   required Direction direction = 2;
 
   optional bytes bytes = 100;

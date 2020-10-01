@@ -35,7 +35,7 @@ class WebsocketServer:
         await site.start()
 
     async def serve(self, routes: List[Route]):
-        self.start(routes)
+        await self.start(routes)
         names = sorted(str(s.name) for s in self.runner.sites)
         print(
             "======== Running on {} ========\n"
