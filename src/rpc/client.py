@@ -14,8 +14,9 @@ import proto.gen.node_pb2
 
 
 class WebsocketClient:
-    def __init__(self, connect_address: str):
+    def __init__(self, connect_address: str, ssl_context: ssl.SSLContext = None):
         self.connect_address = connect_address
+        self.ssl_context = ssl_context
         self.session = aiohttp.ClientSession()
         self.request_dict = dict()  # {request_id: int : queue: asyncio.Queue}
 
@@ -36,13 +37,14 @@ class WebsocketClient:
             pass
 
     async def connect(self):
-        print(f"connecting to {self.connect_address}")
+        print(f"connecting to {self.connect_address}, ssl_context={self.ssl_context}")
         try:
-            self.ws = await self.session.ws_connect(self.connect_address)
-        except Exception as ex:
-            raise ConnectionError(
-                f"Exception caught connecting to {self.connect_address}: {ex}"
+            self.ws = await self.session.ws_connect(
+                self.connect_address, ssl=self.ssl_context
             )
+        except Exception as ex:
+            print(f"Exception caught connecting to {self.connect_address}")
+            raise ex
 
         self.receive_task = asyncio.get_event_loop().create_task(
             self._receive_from_websocket()

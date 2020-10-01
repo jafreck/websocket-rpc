@@ -4,10 +4,11 @@ import os
 import ssl
 import sys
 from multiprocessing import Process
-from typing import Optional  # noqa
+from typing import Any, Optional, List
 
 import aiohttp
 import pytest
+import trustme
 from aiohttp import WSMsgType, request, web
 
 # TODO: not sure why pytest is complaining so much about imports,
@@ -19,6 +20,15 @@ import rpc.client
 import rpc.main
 import rpc.proto.gen.node_pb2
 import rpc.server
+
+listen_port = 1234
+
+
+@pytest.fixture
+def port() -> int:
+    global listen_port
+    listen_port += 1
+    return listen_port
 
 
 def async_wrapper(func):
@@ -56,62 +66,64 @@ async def websocket_test_handler(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
-def construct_tls12_restrictive_ssl_context() -> ssl.SSLContext:
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-    context.options |= ssl.OP_NO_TLSv1
-    context.options |= ssl.OP_NO_TLSv1_1
-    context.options |= ssl.OP_NO_SSLv2
-    context.options |= ssl.OP_NO_SSLv3
-    return context
-
-
-def construct_ssl_context(
-    certpath: str, client_certpath: Optional[str] = None
-) -> ssl.SSLContext:
-    """Construct ssl context to be used for server/client communications
-
-    :param certpath: path to cert chain
-    :param client_certpath: path to CA certificates
-    to trust for certificate verification
-    :return: ssl.SSLContext
-    """
-    # configure SSL/TLS options cert file paths
-    context = construct_tls12_restrictive_ssl_context()
-    context.load_cert_chain(certfile=certpath)
-    # if client_certpath and common.config.agent_ssl_client_auth():
-    #     context.load_verify_locations(
-    #     cafile=client_certpath)
-    return context
-
-
-async def run_test_server(host: str, port: int, ssl_context: ssl.SSLContext = None):
+async def run_test_server(
+    port: int,
+    host: str = "localhost",
+    ssl_context: ssl.SSLContext = None,
+    routes: List[rpc.server.Route] = None,
+):
     print("running test server")
+    if routes == None:
+        routes = [rpc.server.Route("/ws", websocket_test_handler)]
     server = rpc.main.WebsocketServer(host=host, port=port, ssl_context=ssl_context)
-    await server.start([rpc.server.Route("/ws", websocket_test_handler)])
+    await server.start(routes)
 
 
-async def connect_test_client() -> rpc.client.WebsocketClient:
-    client = rpc.main.WebsocketClient("http://127.0.0.1:1234/ws")
+async def connect_test_client(
+    port: int, host="localhost", ssl_context: ssl.SSLContext = None
+) -> rpc.client.WebsocketClient:
+    protocol = "https" if ssl_context is not None else "http"
+    client = rpc.main.WebsocketClient(
+        f"{protocol}://localhost:{port}/ws", ssl_context=ssl_context
+    )
     await client.connect()
     return client
 
 
-async def test_simple_client_server_no_ssl():
-    await run_test_server(host="127.0.0.1", port=1234, ssl_context=None)
-    client = await connect_test_client()
+async def test_simple_client_server_no_ssl(port: int):
+    await run_test_server(port=port, ssl_context=None)
+    client = await connect_test_client(port=port, ssl_context=None)
 
     response = await client.send_and_receive(b"test")
 
     assert response == b"test/answer"
 
 
-# async def test_simple_client_server_with_ssl():
-#     pass
+async def test_simple_client_server_with_ssl(
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+):
+    await run_test_server(port=port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+
+    response = await client.send_and_receive(b"test")
+
+    assert response == b"test/answer"
 
 
-# async def test_two_client_requests_correct_response():
-#     pass
+async def test_two_client_requests_correct_response(
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+):
+    await run_test_server(port=port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+
+    response1_task = client.send_and_receive(b"test")
+    response2_task = client.send_and_receive(b"test2")
+
+    results = await asyncio.gather(response1_task, response2_task)
+
+    assert results[0] == b"test/answer"
+    assert results[1] == b"test2/answer"
 
 
-# async def test_websocket_reconnect():
-#     pass
+async def test_websocket_reconnect_after_connection_lost():
+    pass
