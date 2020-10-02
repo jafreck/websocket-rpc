@@ -1,12 +1,8 @@
 import argparse
 import asyncio
-import ssl
-import sys
 from enum import Enum
-from typing import Optional
 
-import aiohttp
-from aiohttp import WSMsgType, request, web
+from aiohttp import WSMsgType, web
 
 import proto.gen.node_pb2
 from server import WebsocketServer, Route

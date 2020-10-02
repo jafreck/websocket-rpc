@@ -3,13 +3,11 @@ import functools
 import os
 import ssl
 import sys
-from multiprocessing import Process
-from typing import Any, Optional, List
+from typing import List
 
 import aiohttp
 import pytest
-import trustme
-from aiohttp import WSMsgType, request, web
+from aiohttp import WSMsgType, web
 
 # TODO: not sure why pytest is complaining so much about imports,
 # but changing sys.path before local imports fixes the issue for now
@@ -21,14 +19,14 @@ import rpc.main
 import rpc.proto.gen.node_pb2
 import rpc.server
 
-listen_port = 1234
+LISTEN_PORT = 1234
 
 
 @pytest.fixture
-def port() -> int:
-    global listen_port
-    listen_port += 1
-    return listen_port
+def server_port() -> int:
+    global LISTEN_PORT
+    LISTEN_PORT += 1
+    return LISTEN_PORT
 
 
 def async_wrapper(func):
@@ -53,19 +51,19 @@ async def basic_websocket_request_responder(ws: web.WebSocketResponse) -> None:
             await ws.send_bytes(node_msg.SerializeToString())
 
         elif msg.type == WSMsgType.ERROR:
-            print(f"simple_websocket_test_handler received error, closing")
+            print("simple_websocket_test_handler received error, closing")
             break
         elif msg.type == aiohttp.WSMsgType.CLOSED:
-            print(f"simple_websocket_test_handler received closed, closing")
+            print("simple_websocket_test_handler received closed, closing")
             break
 
 
 async def simple_websocket_test_handler(request: web.Request) -> web.WebSocketResponse:
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-    await basic_websocket_request_responder(ws)
+    wsr = web.WebSocketResponse()
+    await wsr.prepare(request)
+    await basic_websocket_request_responder(wsr)
     print("websocket connection closed")
-    return ws
+    return wsr
 
 
 async def run_test_server(
@@ -75,7 +73,7 @@ async def run_test_server(
     routes: List[rpc.server.Route] = None,
 ):
     print("running test server")
-    if routes == None:
+    if routes is None:
         routes = [rpc.server.Route("/ws", simple_websocket_test_handler)]
     server = rpc.main.WebsocketServer(host=host, port=port, ssl_context=ssl_context)
     await server.start(routes)
@@ -86,7 +84,7 @@ async def connect_test_client(
 ) -> rpc.client.WebsocketClient:
     protocol = "https" if ssl_context is not None else "http"
     client = rpc.main.WebsocketClient(
-        f"{protocol}://localhost:{port}{path}", ssl_context=ssl_context
+        f"{protocol}://{host}:{port}{path}", ssl_context=ssl_context
     )
     # await client.connect()
     return client
@@ -97,9 +95,9 @@ async def connect_test_client(
 ####################################
 
 
-async def test_simple_client_server_no_ssl(port: int):
-    await run_test_server(port=port, ssl_context=None)
-    client = await connect_test_client(port=port, ssl_context=None)
+async def test_simple_client_server_no_ssl(server_port: int):
+    await run_test_server(port=server_port, ssl_context=None)
+    client = await connect_test_client(port=server_port, ssl_context=None)
 
     response = await client.send_and_receive(b"test")
 
@@ -107,10 +105,10 @@ async def test_simple_client_server_no_ssl(port: int):
 
 
 async def test_simple_client_server_with_ssl(
-    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    await run_test_server(port=port, ssl_context=server_ssl_ctx)
-    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+    await run_test_server(port=server_port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
 
     response = await client.send_and_receive(b"test")
 
@@ -118,10 +116,10 @@ async def test_simple_client_server_with_ssl(
 
 
 async def test_two_client_requests_correct_response(
-    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    await run_test_server(port=port, ssl_context=server_ssl_ctx)
-    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+    await run_test_server(port=server_port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
 
     response1_task = client.send_and_receive(b"test")
     response2_task = client.send_and_receive(b"test2")
@@ -133,14 +131,14 @@ async def test_two_client_requests_correct_response(
 
 
 async def test_websocket_connection_multiple_concurrent_requests_success(
-    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     await run_test_server(
-        port=port,
+        port=server_port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", simple_websocket_test_handler)],
     )
-    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
 
     results = await asyncio.gather(
         client.send_and_receive(b"test0"),
@@ -157,7 +155,7 @@ async def test_websocket_connection_multiple_concurrent_requests_success(
 
 
 async def test_dropped_websocket_connection_times_out(
-    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     async def drop_connection_handler(
         request: web.Request,
@@ -167,18 +165,18 @@ async def test_dropped_websocket_connection_times_out(
         return ws
 
     await run_test_server(
-        port=port,
+        port=server_port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", drop_connection_handler)],
     )
-    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
 
     with pytest.raises(asyncio.TimeoutError):
         await client.send_and_receive(b"test")
 
 
 async def test_websocket_reconnect_after_connection_lost(
-    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     connection_count = 0
 
@@ -201,11 +199,11 @@ async def test_websocket_reconnect_after_connection_lost(
         return ws
 
     await run_test_server(
-        port=port,
+        port=server_port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", drop_first_connection_handler)],
     )
-    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
 
     response1_task = client.send_and_receive(b"test")
     response2_task = client.send_and_receive(b"test2")

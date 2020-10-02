@@ -1,14 +1,8 @@
-import argparse
 import asyncio
 import ssl
-import sys
-from enum import Enum
-from typing import Callable, List, NamedTuple, Optional
+from typing import Callable, List, NamedTuple
 
-import aiohttp
-from aiohttp import WSMsgType, request, web
-
-import proto.gen.node_pb2
+from aiohttp import web
 
 
 class Route(NamedTuple):

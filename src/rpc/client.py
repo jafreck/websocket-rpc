@@ -1,18 +1,11 @@
 import asyncio
-import queue
 import ssl
-import sys
-import threading
 import uuid
-from enum import Enum
-from typing import Optional
 
 import aiohttp
-from aiohttp import WSMsgType, request, web
+from aiohttp import WSMsgType
 
 import proto.gen.node_pb2
-
-import json
 
 
 class WebsocketClient:
@@ -123,3 +116,29 @@ class WebsocketClient:
             return response.bytes
         finally:
             del self.request_dict[node_msg.id]
+
+
+"""
+    what should be done here:
+        there should be a wrapper around the ws connection that pulls from a queue and sends messages
+        it should hold a cache of the outgoing requests
+        it should remove requests from that cache when the request times out
+        it should recieve responses and send them to the function waiting for a response
+
+    the API should look like this
+        client.send(msg: bytes) -> bytes
+
+    the client should not care about the protobuf messages
+
+    I think I need a producer/consumer pattern where:
+        the client (requestor) registers itself as a consumer by passing the WebsocketClient a asyncio.Queue
+        WebsocketClient has a dictionary of request IDs to asyncio.Queues
+        the async loop responsible for recieving messages acts as a producor:
+            when message msg is received, the WebsocketClient looks up the request ID in ints request dictionary
+            if present, it will put the response in the queue
+
+
+    feature to add:
+        - request timeout
+        - auto connect websocket on disconnect
+"""
