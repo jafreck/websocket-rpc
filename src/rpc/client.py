@@ -20,18 +20,19 @@ class WebsocketClient:
         # instantiated outside of __init__
         self._ws = None
         self._receive_task = None
+        self._reconnect_websocket_task = None
 
     async def close(self):
         # TODO: create context manager instead of explicit close()?
         try:
             if self._ws is not None and not self._ws.closed:
                 await self._ws.close()
-        except:
+        except Exception:
             pass
 
         try:
             await self.session.close()
-        except:
+        except Exception:
             pass
 
     async def connect(self):
@@ -44,9 +45,16 @@ class WebsocketClient:
             print(f"Exception caught connecting to {self.connect_address}")
             raise ex
 
-        self._receive_task = asyncio.get_event_loop().create_task(
-            self._receive_from_websocket()
-        )
+        loop = asyncio.get_event_loop()
+        self._receive_task = loop.create_task(self._receive_from_websocket())
+        self._reconnect_websocket_task = loop.create_task(self._websocket_monitor())
+
+    async def _websocket_monitor(self):
+        while True:
+            print("_websocket_monitor running...")
+            await self._reconnect_websocket_if_needed()
+            await asyncio.sleep(1)
+            print("_websocket_monitor done sleeping...")
 
     async def _reconnect_websocket_if_needed(self):
         async with self._lock:
@@ -64,8 +72,11 @@ class WebsocketClient:
                     + f"self._receive_task.done={self._receive_task.done() if self._receive_task else None}"
                 )
 
-                if self._receive_task:
+                if self._receive_task is not None:
                     self._receive_task.cancel()
+
+                if self._reconnect_websocket_task is not None:
+                    self._reconnect_websocket_task.cancel()
 
                 await self.connect()
 
@@ -96,7 +107,7 @@ class WebsocketClient:
             print(self._receive_from_websocket.__name__)
             raise
 
-    async def send_and_receive(self, data: bytes) -> bytes:
+    async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()
 
         node_msg = proto.gen.node_pb2.NodeMessage()
@@ -116,29 +127,3 @@ class WebsocketClient:
             return response.bytes
         finally:
             del self.request_dict[node_msg.id]
-
-
-"""
-    what should be done here:
-        there should be a wrapper around the ws connection that pulls from a queue and sends messages
-        it should hold a cache of the outgoing requests
-        it should remove requests from that cache when the request times out
-        it should recieve responses and send them to the function waiting for a response
-
-    the API should look like this
-        client.send(msg: bytes) -> bytes
-
-    the client should not care about the protobuf messages
-
-    I think I need a producer/consumer pattern where:
-        the client (requestor) registers itself as a consumer by passing the WebsocketClient a asyncio.Queue
-        WebsocketClient has a dictionary of request IDs to asyncio.Queues
-        the async loop responsible for recieving messages acts as a producor:
-            when message msg is received, the WebsocketClient looks up the request ID in ints request dictionary
-            if present, it will put the response in the queue
-
-
-    feature to add:
-        - request timeout
-        - auto connect websocket on disconnect
-"""

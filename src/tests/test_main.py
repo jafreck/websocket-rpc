@@ -23,7 +23,7 @@ LISTEN_PORT = 1234
 
 
 @pytest.fixture
-def server_port() -> int:
+def port() -> int:
     global LISTEN_PORT
     LISTEN_PORT += 1
     return LISTEN_PORT
@@ -86,6 +86,8 @@ async def connect_test_client(
     client = rpc.main.WebsocketClient(
         f"{protocol}://{host}:{port}{path}", ssl_context=ssl_context
     )
+    # TODO: unclear why connect causes test failures
+    # probably to do with reconnect_if_needed not being correct
     # await client.connect()
     return client
 
@@ -95,34 +97,34 @@ async def connect_test_client(
 ####################################
 
 
-async def test_simple_client_server_no_ssl(server_port: int):
-    await run_test_server(port=server_port, ssl_context=None)
-    client = await connect_test_client(port=server_port, ssl_context=None)
+async def test_simple_client_server_no_ssl(port: int):
+    await run_test_server(port=port, ssl_context=None)
+    client = await connect_test_client(port=port, ssl_context=None)
 
-    response = await client.send_and_receive(b"test")
+    response = await client.request(b"test")
 
     assert response == b"test/answer"
 
 
 async def test_simple_client_server_with_ssl(
-    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    await run_test_server(port=server_port, ssl_context=server_ssl_ctx)
-    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
+    await run_test_server(port=port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
-    response = await client.send_and_receive(b"test")
+    response = await client.request(b"test")
 
     assert response == b"test/answer"
 
 
 async def test_two_client_requests_correct_response(
-    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    await run_test_server(port=server_port, ssl_context=server_ssl_ctx)
-    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
+    await run_test_server(port=port, ssl_context=server_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
-    response1_task = client.send_and_receive(b"test")
-    response2_task = client.send_and_receive(b"test2")
+    response1_task = client.request(b"test")
+    response2_task = client.request(b"test2")
 
     results = await asyncio.gather(response1_task, response2_task)
 
@@ -131,19 +133,19 @@ async def test_two_client_requests_correct_response(
 
 
 async def test_websocket_connection_multiple_concurrent_requests_success(
-    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     await run_test_server(
-        port=server_port,
+        port=port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", simple_websocket_test_handler)],
     )
-    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
     results = await asyncio.gather(
-        client.send_and_receive(b"test0"),
-        client.send_and_receive(b"test1"),
-        client.send_and_receive(b"test2"),
+        client.request(b"test0"),
+        client.request(b"test1"),
+        client.request(b"test2"),
     )
     for i, result in enumerate(results):
         assert result == f"test{i}/answer".encode("utf-8")
@@ -155,7 +157,7 @@ async def test_websocket_connection_multiple_concurrent_requests_success(
 
 
 async def test_dropped_websocket_connection_times_out(
-    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     async def drop_connection_handler(
         request: web.Request,
@@ -165,18 +167,18 @@ async def test_dropped_websocket_connection_times_out(
         return ws
 
     await run_test_server(
-        port=server_port,
+        port=port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", drop_connection_handler)],
     )
-    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
     with pytest.raises(asyncio.TimeoutError):
-        await client.send_and_receive(b"test")
+        await client.request(b"test")
 
 
 async def test_websocket_reconnect_after_connection_lost(
-    server_port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     connection_count = 0
 
@@ -199,15 +201,15 @@ async def test_websocket_reconnect_after_connection_lost(
         return ws
 
     await run_test_server(
-        port=server_port,
+        port=port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route("/ws", drop_first_connection_handler)],
     )
-    client = await connect_test_client(port=server_port, ssl_context=client_ssl_ctx)
+    client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
-    response1_task = client.send_and_receive(b"test")
-    response2_task = client.send_and_receive(b"test2")
-    response3_task = client.send_and_receive(b"test3")
+    response1_task = client.request(b"test")
+    response2_task = client.request(b"test2")
+    response3_task = client.request(b"test3")
 
     with pytest.raises(asyncio.TimeoutError):
         await response1_task
@@ -219,3 +221,15 @@ async def test_websocket_reconnect_after_connection_lost(
     assert connection_count == 1
     assert results[0] == b"test2/answer"
     assert results[1] == b"test3/answer"
+
+
+def test_graceful_websocket_shutdown_success():
+    pass
+
+
+def test_graceful_websocket_shutdown_client_connects():
+    pass
+
+
+def test_client_autoreconnects_after_connection_dropped():
+    pass

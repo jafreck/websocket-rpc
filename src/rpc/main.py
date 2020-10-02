@@ -40,7 +40,7 @@ async def run_interactive_client():
     await client.connect()
     msg = input("client: ").encode("utf-8")
     while True:
-        response = await client.send_and_receive(msg)
+        response = await client.request(msg)
         print(f"response: {response}")
         msg = input("client: ").encode("utf-8")
 
