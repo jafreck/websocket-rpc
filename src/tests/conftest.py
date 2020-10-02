@@ -22,17 +22,13 @@ def tls_certificate_authority() -> trustme.CA:
 
 @pytest.fixture
 def tls_certificate(tls_certificate_authority: trustme.CA) -> trustme.LeafCert:
-    cert = tls_certificate_authority.issue_server_cert("localhost", "127.0.0.1", "::1")
-
-    print(f"server_ssl_ctx: cert: {cert.private_key_and_cert_chain_pem}")
-    return cert
+    return tls_certificate_authority.issue_server_cert("localhost", "127.0.0.1", "::1")
 
 
 @pytest.fixture
 def server_ssl_ctx(tls_certificate: trustme.LeafCert) -> ssl.SSLContext:
     ssl_ctx = construct_tls12_restrictive_ssl_context()
     tls_certificate.configure_cert(ssl_ctx)
-    print(f"server_ssl_ctx: cert: {tls_certificate.private_key_and_cert_chain_pem}")
     return ssl_ctx
 
 
