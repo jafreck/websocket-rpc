@@ -1,8 +1,14 @@
+# production
 aiohttp
 aiohttp[speedups]
-pytest
 protobuf
+pyopenssl
+
+
+# test / dev
 pylint
 pytest
 pytest-aiohttp
 black
+trustme
+twine

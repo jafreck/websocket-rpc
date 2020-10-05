@@ -1,12 +1,8 @@
 import argparse
 import asyncio
-import ssl
-import sys
 from enum import Enum
-from typing import Optional
 
-import aiohttp
-from aiohttp import WSMsgType, request, web
+from aiohttp import WSMsgType, web
 
 import proto.gen.node_pb2
 from server import WebsocketServer, Route
@@ -18,14 +14,16 @@ async def websocket_test_handler(request: web.Request) -> web.WebSocketResponse:
     await ws.prepare(request)
 
     async for msg in ws:
-        if msg.type == WSMsgType.TEXT:
-            print("recieved msg:", msg.data)
-            if msg.data == "close":
-                await ws.close()
-            else:
-                await ws.send_str(msg.data + "/answer")
+        print(f"received message: type={msg.type}, data={msg.data}")
+        if msg.type == WSMsgType.BINARY:
+            node_msg = proto.gen.node_pb2.NodeMessage()
+            node_msg.ParseFromString(msg.data)
+            print(f"received node_msg: {node_msg}")
+            node_msg.bytes = node_msg.bytes + b"/answer"
+            await ws.send_bytes(node_msg.SerializeToString())
+
         elif msg.type == WSMsgType.ERROR:
-            print("ws connection closed with exception %s" % ws.exception())
+            print(f"ws connection closed with exception {ws.exception()}")
 
     print("websocket connection closed")
     return ws
@@ -40,12 +38,11 @@ async def run_server():
 async def run_interactive_client():
     client = WebsocketClient("http://127.0.0.1:1234/ws")
     await client.connect()
-    msg = input("client: ")
-    while msg != "close":
-        await client.send_str(msg)
-        response = await client.receive_str()
-        print(f"response: {response.data}")
-        msg = input("client: ")
+    msg = input("client: ").encode("utf-8")
+    while True:
+        response = await client.request(msg)
+        print(f"response: {response}")
+        msg = input("client: ").encode("utf-8")
 
 
 async def main():
@@ -59,6 +56,7 @@ async def main():
             await run_interactive_client()
         except Exception as ex:
             print(f"Exception caught running interactive client: {ex}")
+            raise ex
 
 
 if __name__ == "__main__":

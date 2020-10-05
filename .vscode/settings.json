@@ -1,4 +1,9 @@
 {
     "python.formatting.provider": "black",
-    "python.pythonPath": "env/bin/python"
+    "python.pythonPath": "env/bin/python",
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintArgs": [
+        "--enable=W0614",
+        "--ignore=C0116"
+    ]
 }

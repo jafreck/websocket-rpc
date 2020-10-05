@@ -1,72 +1,129 @@
 import asyncio
 import ssl
-import sys
-from enum import Enum
-from typing import Optional
+import uuid
 
 import aiohttp
-from aiohttp import WSMsgType, request, web
+from aiohttp import WSMsgType
 
 import proto.gen.node_pb2
 
 
 class WebsocketClient:
-    def __init__(self, connect_address: str):
+    def __init__(self, connect_address: str, ssl_context: ssl.SSLContext = None):
         self.connect_address = connect_address
+        self.ssl_context = ssl_context
         self.session = aiohttp.ClientSession()
-        self.ws = None
+        self.request_dict = dict()  # {request_id: int : queue: asyncio.Queue}
+
+        self._lock = asyncio.Lock()
+
+        # instantiated outside of __init__
+        self._ws = None
+        self._receive_task = None
+        self._reconnect_websocket_task = None
 
     async def close(self):
-        # TODO: create context manager instead?
+        # TODO: create context manager instead of explicit close()?
         try:
-            if self.ws is not None and not self.ws.closed:
-                await self.ws.close()
-        except:
+            if self._ws is not None and not self._ws.closed:
+                await self._ws.close()
+        except Exception:
             pass
 
         try:
             await self.session.close()
-        except:
+        except Exception:
             pass
 
-
     async def connect(self):
-        print(f"connecting to {self.connect_address}")
+        print(f"connecting to {self.connect_address}, ssl_context={self.ssl_context}")
         try:
-            self.ws = await self.session.ws_connect(self.connect_address)
+            self._ws = await self.session.ws_connect(
+                self.connect_address, ssl=self.ssl_context
+            )
         except Exception as ex:
-            raise ConnectionError(f"Exception caught connecting to {self.connect_address}: {ex}")
+            print(f"Exception caught connecting to {self.connect_address}")
+            raise ex
 
-    async def send_str(self, msg: str):
-        # TODO: check connection status
-        if self.ws.closed:
-            raise ConnectionError("websocket is closed")
+        loop = asyncio.get_event_loop()
+        self._receive_task = loop.create_task(self._receive_from_websocket())
+        self._reconnect_websocket_task = loop.create_task(self._websocket_monitor())
 
-        await self.ws.send_str(msg)
+    async def _websocket_monitor(self):
+        while True:
+            print("_websocket_monitor running...")
+            await self._reconnect_websocket_if_needed()
+            await asyncio.sleep(1)
+            print("_websocket_monitor done sleeping...")
 
-    async def send_msg(self, msg: proto.gen.node_pb2.NodeMessage):
-        # TODO: check connection status
-        if self.ws.closed:
-            raise ConnectionError("websocket is closed")
+    async def _reconnect_websocket_if_needed(self):
+        async with self._lock:
+            if (
+                self._ws is None
+                or self._ws.closed
+                or self._receive_task is None
+                or self._receive_task.done()
+            ):
+                # TODO: cleanup existing requests?
+                # may need to take a lock here
+                print(
+                    f"Reconnecting websocket: self._ws={self._ws}, "
+                    + f"self._ws.closed={self._ws.closed if self._ws else None}, "
+                    + f"self._receive_task.done={self._receive_task.done() if self._receive_task else None}"
+                )
 
-        await self.ws.send_bytes(msg)
+                if self._receive_task is not None:
+                    self._receive_task.cancel()
 
-    async def recieve_msg(self) -> aiohttp.WSMessage:
-        if self.ws.closed:
-            raise ConnectionError("websocket is closed")
+                if self._reconnect_websocket_task is not None:
+                    self._reconnect_websocket_task.cancel()
 
-        return await self.ws.receive()
+                await self.connect()
 
-    async def receive_str(self) -> str:
-        if self.ws.closed:
-            raise ConnectionError("websocket is closed")
+    async def _receive_from_websocket(self):
+        try:
 
-        return await self.ws.receive_str()
+            while self._ws is not None or self._ws.closed or self._receive_task.done():
+                async with self._lock:
+                    # try:
+                    #     response = await asyncio.wait_for(await self._ws.receive(), 1)
+                    # except TimeoutError:
+                    #     continue
+                    response = await self._ws.receive()
+                    # print(f"client received websocket message: {response}")
+                    if response.type == WSMsgType.BINARY:
+                        node_msg = proto.gen.node_pb2.NodeMessage()
+                        node_msg.ParseFromString(response.data)
+                        print(f"client received node_msg: {node_msg}")
 
-    async def recieve_node_msg(self) -> proto.gen.node_pb2.NodeMessage:
-        if self.ws.closed:
-            raise ConnectionError("websocket is closed")
+                        response_queue = self.request_dict[node_msg.id]
+                        response_queue.put_nowait(node_msg)
+                    elif response.type == aiohttp.WSMsgType.ERROR:
+                        break
+                    elif response.type == aiohttp.WSMsgType.CLOSED:
+                        break
+                    # TODO: handle all other message types
+        except asyncio.CancelledError:
+            print(self._receive_from_websocket.__name__)
+            raise
 
-        serialized_node_msg = await self.ws.receive_bytes()
+    async def request(self, data: bytes) -> bytes:
+        await self._reconnect_websocket_if_needed()
+
         node_msg = proto.gen.node_pb2.NodeMessage()
-        return node_msg.ParseFromString(serialized_node_msg)
+        node_msg.id = str(uuid.uuid4())
+        node_msg.bytes = data
+        node_msg.direction = proto.gen.node_pb2.Direction.NodeToServer
+        await self._ws.send_bytes(node_msg.SerializeToString())
+
+        response_queue = asyncio.Queue()
+        self.request_dict[node_msg.id] = response_queue
+
+        try:
+            response = await asyncio.wait_for(response_queue.get(), 2)
+            print(
+                f"client received response: {response}, request_dict={self.request_dict.keys()}"
+            )
+            return response.bytes
+        finally:
+            del self.request_dict[node_msg.id]

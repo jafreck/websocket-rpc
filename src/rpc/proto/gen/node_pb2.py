@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto2',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\nnode.proto\x12\x04node\"L\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x02(\x05\x12\"\n\tdirection\x18\x02 \x02(\x0e\x32\x0f.node.Direction\x12\r\n\x05\x62ytes\x18\x64 \x01(\x0c*/\n\tDirection\x12\x10\n\x0cServerToNode\x10\x01\x12\x10\n\x0cNodeToServer\x10\x02'
+  serialized_pb=b'\n\nnode.proto\x12\x04node\"L\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x02(\t\x12\"\n\tdirection\x18\x02 \x02(\x0e\x32\x0f.node.Direction\x12\r\n\x05\x62ytes\x18\x64 \x01(\x0c*/\n\tDirection\x12\x10\n\x0cServerToNode\x10\x01\x12\x10\n\x0cNodeToServer\x10\x02'
 )
 
 _DIRECTION = _descriptor.EnumDescriptor(
@@ -64,8 +64,8 @@ _NODEMESSAGE = _descriptor.Descriptor(
   fields=[
     _descriptor.FieldDescriptor(
       name='id', full_name='node.NodeMessage.id', index=0,
-      number=1, type=5, cpp_type=1, label=2,
-      has_default_value=False, default_value=0,
+      number=1, type=9, cpp_type=9, label=2,
+      has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
