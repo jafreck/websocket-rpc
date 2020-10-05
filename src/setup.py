@@ -2,7 +2,7 @@ import setuptools
 
 
 setuptools.setup(
-    name="websocket-rpc",
+    name="pywebsocket-rpc",
     version="0.0.1",
     author="jafreck",
     author_email="jafreck@microosft.com",
