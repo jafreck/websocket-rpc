@@ -31,7 +31,7 @@ class WebsocketServer:
     ):
         self.host = host
         self.port = port
-        self.ssl_context = ssl_context  # TODO: impl ssl
+        self.ssl_context = ssl_context
         self.app = web.Application()
         self.runner = web.AppRunner(self.app)
 

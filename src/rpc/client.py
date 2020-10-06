@@ -1,6 +1,7 @@
 import asyncio
 import ssl
 import uuid
+from typing import Awaitable, Callable
 
 import aiohttp
 from aiohttp import WSMsgType
@@ -11,15 +12,19 @@ from server import Token
 # constants
 _AUTHORIZATION_HEADER_KEY = "Authorization"
 
+IncomingMessageHandler = Callable[[bytes], Awaitable[bytes]]
+
 
 class WebsocketClient:
     def __init__(
         self,
         connect_address: str,
+        incoming_message_handler: IncomingMessageHandler,
         ssl_context: ssl.SSLContext = None,
         token: Token = None,
     ):
         self.connect_address = connect_address
+        self.incoming_message_handler = incoming_message_handler
         self.ssl_context = ssl_context
         self.token = token
 
@@ -129,18 +134,21 @@ class WebsocketClient:
     async def _receive_from_websocket(self):
         try:
             while self._ws is not None or self._ws.closed or self._receive_task.done():
-                response = await self._ws.receive()
-                # print(f"client received websocket message: {response}")
-                if response.type == WSMsgType.BINARY:
+                ws_msg = await self._ws.receive()
+                # print(f"client received websocket message: {ws_msg}")
+                if ws_msg.type == WSMsgType.BINARY:
                     node_msg = proto.gen.node_pb2.NodeMessage()
-                    node_msg.ParseFromString(response.data)
+                    node_msg.ParseFromString(ws_msg.data)
                     print(f"client received node_msg: {node_msg}")
-
-                    response_queue = self.request_dict[node_msg.id]
-                    response_queue.put_nowait(node_msg)
-                elif response.type == aiohttp.WSMsgType.ERROR:
+                    if node_msg.direction == proto.gen.node_pb2.Direction.ServerToNode:
+                        # TODO: handle incoming server request
+                        await self.incoming_message_handler()
+                    if node_msg.direction == proto.gen.node_pb2.Direction.NodeToServer:
+                        response_queue = self.request_dict[node_msg.id]
+                        response_queue.put_nowait(node_msg)
+                elif ws_msg.type == aiohttp.WSMsgType.ERROR:
                     break
-                elif response.type == aiohttp.WSMsgType.CLOSED:
+                elif ws_msg.type == aiohttp.WSMsgType.CLOSED:
                     break
                 # TODO: handle all other message types
         except asyncio.CancelledError:

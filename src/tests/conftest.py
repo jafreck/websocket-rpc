@@ -1,9 +1,7 @@
 import ssl
-from typing import Optional
 
 import pytest
 import trustme
-from OpenSSL import SSL, crypto
 
 LISTEN_PORT = 1234
 
