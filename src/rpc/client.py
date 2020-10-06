@@ -6,15 +6,25 @@ import aiohttp
 from aiohttp import WSMsgType
 
 import proto.gen.node_pb2
+from server import Token
+
+# constants
+_AUTHORIZATION_HEADER_KEY = "Authorization"
 
 
 class WebsocketClient:
-    def __init__(self, connect_address: str, ssl_context: ssl.SSLContext = None):
+    def __init__(
+        self,
+        connect_address: str,
+        ssl_context: ssl.SSLContext = None,
+        token: Token = None,
+    ):
         self.connect_address = connect_address
         self.ssl_context = ssl_context
+        self.token = token
+
         self.session = aiohttp.ClientSession()
         self.request_dict = dict()  # {request_id: int : queue: asyncio.Queue}
-
         self._lock = asyncio.Lock()
 
         # instantiated outside of __init__
@@ -23,26 +33,60 @@ class WebsocketClient:
         self._reconnect_websocket_task = None
 
     async def close(self):
-        # TODO: create context manager instead of explicit close()?
+        try:
+            self._receive_task.cancel()
+        except Exception as ex:
+            print(
+                f"WebsocketClient.close encountered exception while cancelling receive_task: {ex}"
+            )
+            pass
+        try:
+            self._reconnect_websocket_task.cancel()
+        except Exception as ex:
+            print(
+                f"WebsocketClient.close encountered exception while cancelling _reconnect_websocket_task: {ex}"
+            )
+            pass
         try:
             if self._ws is not None and not self._ws.closed:
                 await self._ws.close()
-        except Exception:
+        except Exception as ex:
+            print(f"WebsocketClient.close encountered exception while closing ws: {ex}")
             pass
 
         try:
             await self.session.close()
-        except Exception:
+        except Exception as ex:
+            print(
+                f"WebsocketClient.close encountered exception while closing session: {ex}"
+            )
             pass
 
     async def connect(self):
+        async with self._lock:
+            await self._connect()
+
+    async def __aenter__(self):
+        await self._connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
+        return self
+
+    async def _connect(self):
         print(f"connecting to {self.connect_address}, ssl_context={self.ssl_context}")
         try:
+            headers = {}
+            if self.token is not None:
+                headers = {_AUTHORIZATION_HEADER_KEY: self.token.value}
             self._ws = await self.session.ws_connect(
-                self.connect_address, ssl=self.ssl_context
+                self.connect_address,
+                ssl=self.ssl_context,
+                headers=headers,
             )
         except Exception as ex:
-            print(f"Exception caught connecting to {self.connect_address}")
+            print(f"Exception caught connecting to {self.connect_address}: {type(ex)}")
             raise ex
 
         loop = asyncio.get_event_loop()
@@ -57,7 +101,9 @@ class WebsocketClient:
             print("_websocket_monitor done sleeping...")
 
     async def _reconnect_websocket_if_needed(self):
+        print("_reconnect_websocket_if_needed trying to take lock")
         async with self._lock:
+            print("_reconnect_websocket_if_needed took lock")
             if (
                 self._ws is None
                 or self._ws.closed
@@ -78,34 +124,30 @@ class WebsocketClient:
                 if self._reconnect_websocket_task is not None:
                     self._reconnect_websocket_task.cancel()
 
-                await self.connect()
+                await self._connect()
 
     async def _receive_from_websocket(self):
         try:
-
             while self._ws is not None or self._ws.closed or self._receive_task.done():
-                async with self._lock:
-                    # try:
-                    #     response = await asyncio.wait_for(await self._ws.receive(), 1)
-                    # except TimeoutError:
-                    #     continue
-                    response = await self._ws.receive()
-                    # print(f"client received websocket message: {response}")
-                    if response.type == WSMsgType.BINARY:
-                        node_msg = proto.gen.node_pb2.NodeMessage()
-                        node_msg.ParseFromString(response.data)
-                        print(f"client received node_msg: {node_msg}")
+                response = await self._ws.receive()
+                # print(f"client received websocket message: {response}")
+                if response.type == WSMsgType.BINARY:
+                    node_msg = proto.gen.node_pb2.NodeMessage()
+                    node_msg.ParseFromString(response.data)
+                    print(f"client received node_msg: {node_msg}")
 
-                        response_queue = self.request_dict[node_msg.id]
-                        response_queue.put_nowait(node_msg)
-                    elif response.type == aiohttp.WSMsgType.ERROR:
-                        break
-                    elif response.type == aiohttp.WSMsgType.CLOSED:
-                        break
-                    # TODO: handle all other message types
+                    response_queue = self.request_dict[node_msg.id]
+                    response_queue.put_nowait(node_msg)
+                elif response.type == aiohttp.WSMsgType.ERROR:
+                    break
+                elif response.type == aiohttp.WSMsgType.CLOSED:
+                    break
+                # TODO: handle all other message types
         except asyncio.CancelledError:
-            print(self._receive_from_websocket.__name__)
+            print(f"{self._receive_from_websocket.__name__} cancelled")
             raise
+        except Exception as e:
+            print(f"{self._receive_from_websocket.__name__} encountered exception {e}")
 
     async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()

@@ -5,6 +5,15 @@ import pytest
 import trustme
 from OpenSSL import SSL, crypto
 
+LISTEN_PORT = 1234
+
+
+@pytest.fixture
+def port() -> int:
+    global LISTEN_PORT
+    LISTEN_PORT += 1
+    return LISTEN_PORT
+
 
 def construct_tls12_restrictive_ssl_context() -> ssl.SSLContext:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS)
