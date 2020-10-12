@@ -3,8 +3,8 @@ from typing import Dict
 
 from aiohttp import WSMsgType, web
 
-from common import IncomingRequestHandler
-from proto.gen.node_pb2 import Direction, NodeMessage
+from .common import IncomingRequestHandler
+from .proto.gen.node_pb2 import Direction, NodeMessage
 
 
 class WebsocketBase:
