@@ -1,14 +1,18 @@
 import asyncio
 import ssl
 import uuid
-from typing import Awaitable, Callable, List, NamedTuple
+from typing import Awaitable, Callable, Dict, List, NamedTuple
 
-from aiohttp import web
+from aiohttp import WSMsgType, web
+from aiojobs.aiohttp import setup, spawn
 
-from common import Token
+from common import Token, IncomingRequestHandler, contstruct_node_message
+from proto.gen.node_pb2 import NodeMessage, Direction
 
 _AioHttpWebsocketHandler = Callable[[web.Request], Awaitable[web.WebSocketResponse]]
-WebsocketHandler = Callable[[web.WebSocketResponse], Awaitable[web.WebSocketResponse]]
+WebsocketHandler = Callable[
+    [web.Request, web.WebSocketResponse], Awaitable[web.WebSocketResponse]
+]
 PrePrepareHook = Callable[["WebsocketServer", web.Request], Awaitable[None]]
 
 
@@ -47,7 +51,7 @@ class WebsocketServer:
             wsr = web.WebSocketResponse()
             await wsr.prepare(request)
             if route.handler is not None:
-                return await route.handler(wsr)
+                return await route.handler(request, wsr)
             return wsr
 
         return websocket_handler
@@ -57,6 +61,9 @@ class WebsocketServer:
     ) -> List[Token]:
         if self.started:
             raise Exception("already started")
+
+        # start aiojobs scheduler
+        setup(app=self.app)
 
         self.started = True
         for _ in range(num_tokens):
@@ -88,3 +95,41 @@ class WebsocketServer:
                 await asyncio.sleep(3600)  # sleep forever in 1 hour intervals
         finally:
             await self.runner.cleanup()
+
+
+RESPONSE_TIMEOUT = 2
+
+"""
+Really all we need here is a handler that says for message in ws, recieve()
+and a serverclient that is created before running that
+"""
+from websocket_base import WebsocketBase
+
+
+class ServerClient:
+    def __init__(
+        self,
+        ws: web.WebSocketResponse,
+        incoming_request_handler: IncomingRequestHandler,
+    ):
+        self.request_dict = {}  # type: Dict[str, asyncio.Queue]
+        self._receive_task = None
+
+        self.incoming_request_handler = incoming_request_handler
+
+        self._base = WebsocketBase(
+            websocket=ws,
+            incoming_direction=Direction.NodeToServer,
+            incoming_request_handler=incoming_request_handler,
+        )
+
+    def initialize(self):
+        self._base.initialize()
+
+    async def receive_messages(self):
+        await self._base.recieve_messages()
+
+    async def request(self, data: bytes) -> bytes:
+        return await self._base.request(
+            contstruct_node_message(data, Direction.ServerToNode)
+        )

@@ -20,6 +20,7 @@ import rpc.common
 import rpc.main
 import rpc.proto.gen.node_pb2
 import rpc.server
+from rpc.websocket_base import WebsocketBase
 
 
 def log_test_details(func):
@@ -32,7 +33,10 @@ def log_test_details(func):
     return wrapper
 
 
-async def basic_websocket_request_responder(ws: web.WebSocketResponse) -> None:
+async def basic_websocket_request_responder(
+    request: web.Request,
+    ws: web.WebSocketResponse,
+) -> None:
     """
     A websocket route handler that responds to a request byte string, x,
     with "x/answer"
@@ -54,7 +58,7 @@ async def basic_websocket_request_responder(ws: web.WebSocketResponse) -> None:
             break
 
 
-async def empty_incoming_message_handler(data: bytes) -> None:
+async def empty_incoming_request_handler(data: bytes) -> None:
     pass
 
 
@@ -79,11 +83,16 @@ async def connect_test_client(
     path="/ws",
     ssl_context: ssl.SSLContext = None,
     token: str = None,
+    incoming_request_handler: rpc.common.IncomingRequestHandler = None,
 ) -> rpc.client.WebsocketClient:
     protocol = "https" if ssl_context is not None else "http"
+
+    if empty_incoming_request_handler is None:
+        incoming_request_handler = empty_incoming_request_handler
+
     client = rpc.main.WebsocketClient(
         connect_address=f"{protocol}://{host}:{port}{path}",
-        incoming_message_handler=empty_incoming_message_handler,
+        incoming_request_handler=incoming_request_handler,
         ssl_context=ssl_context,
         token=token,
     )
@@ -162,7 +171,7 @@ async def test_basic_context_manager_client(
     tokens = await run_test_server(port=port, ssl_context=server_ssl_ctx)
     async with rpc.client.WebsocketClient(
         connect_address=f"https://localhost:{port}/ws",
-        incoming_message_handler=empty_incoming_message_handler,
+        incoming_request_handler=empty_incoming_request_handler,
         token=tokens[0],
         ssl_context=client_ssl_ctx,
     ) as client:
@@ -181,6 +190,7 @@ async def test_dropped_websocket_connection_times_out(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     async def drop_connection_handler(
+        request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         return ws
@@ -203,6 +213,7 @@ async def test_websocket_reconnect_after_connection_lost(
     connection_count = 0
 
     async def drop_first_connection_handler(
+        request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal connection_count
@@ -212,7 +223,7 @@ async def test_websocket_reconnect_after_connection_lost(
             connection_count += 1
             return ws
 
-        await basic_websocket_request_responder(ws)
+        await basic_websocket_request_responder(request, ws)
 
         print("websocket connection closed")
         return ws
@@ -285,8 +296,9 @@ async def test_invalid_token_rejected(
         self: rpc.server.WebsocketServer, request: web.Request
     ) -> None:
         client_token = request.headers["Authentication"]
+        client_token = request.headers["x-ms-node-id"]
         if client_token not in self.tokens:
-            raise Exception("invalid token")
+            raise Exception(f"invalid token: {client_token}")
 
     await run_test_server(
         port=port,
@@ -320,62 +332,38 @@ async def test_multi_client_valid_token_success(
 
 
 @log_test_details
-async def server_generated_request_success(
+async def test_server_generated_request_success(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    class ServerClient:
-        def __init__(self):
-            self.request_dict = {}
+    s_client = None  # type: rpc.server.ServerClient
 
-        async def request(self, data: bytes) -> bytes:
-            node_msg = proto.gen.node_pb2.NodeMessage()
-            node_msg.id = str(uuid.uuid4())
-            node_msg.bytes = data
-            node_msg.direction = proto.gen.node_pb2.Direction.NodeToServer
-            await self._ws.send_bytes(node_msg.SerializeToString())
+    async def test_incoming_message_handler(data: bytes):
+        return data + b"/answer"
 
-            response_queue = asyncio.Queue()
-            self.request_dict[node_msg.id] = response_queue
+    async def server_client_handler(
+        request: web.Request,
+        ws: web.WebSocketResponse,
+    ) -> web.WebSocketResponse:
+        nonlocal s_client
+        client_token = request.headers["Authentication"]
+        client_id = request.headers["x-ms-node-id"]
+        s_client = rpc.server.ServerClient(ws, test_incoming_message_handler)
+        s_client.initialize()
 
-            try:
-                response = await asyncio.wait_for(response_queue.get(), 2)
-                print(
-                    f"client received response: {response}, request_dict={self.request_dict.keys()}"
-                )
-                return response.bytes
-            finally:
-                del self.request_dict[node_msg.id]
+        await s_client.receive_messages()
+        return ws
 
-        @staticmethod
-        async def server_client_handler(ws: web.WebSocketResponse) -> None:
-            """
-            A websocket route handler that responds to a request byte string, x,
-            with "x/answer"
-            """
-            async for msg in ws:
-                print(f"server received message: type={msg.type}, data={msg.data}")
-                if msg.type == WSMsgType.BINARY:
-                    node_msg = rpc.proto.gen.node_pb2.NodeMessage()
-                    node_msg.ParseFromString(msg.data)
-                    print(f"server received node_msg: {node_msg}")
-                    node_msg.bytes = node_msg.bytes + b"/answer"
-                    await ws.send_bytes(node_msg.SerializeToString())
-
-                elif msg.type == WSMsgType.ERROR:
-                    print("simple_websocket_test_handler received error, closing")
-                    break
-                elif msg.type == aiohttp.WSMsgType.CLOSED:
-                    print("simple_websocket_test_handler received closed, closing")
-                    break
-
-    await run_test_server(
+    tokens = await run_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route(path="/ws", handler=server_client_handler)],
     )
 
-    client = await connect_test_client(
+    await connect_test_client(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
+        incoming_request_handler=test_incoming_message_handler,
     )
+
+    assert b"test/answer" == await s_client.request(b"test")

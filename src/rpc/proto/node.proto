@@ -15,4 +15,6 @@ message NodeMessage {
   required Direction direction = 2;
 
   optional bytes bytes = 100;
+  // TODO: add headers 
+  // TODO: add server timeout?
 }
