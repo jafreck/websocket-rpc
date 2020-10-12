@@ -22,16 +22,13 @@ class Route(NamedTuple):
     pre_prepare_hook: PrePrepareHook = None
 
 
-def generate_token() -> Token:
-    return Token(value=str(uuid.uuid4()))
-
-
 class WebsocketServer:
     def __init__(
         self,
         host: str,
         port: int,
         ssl_context: ssl.SSLContext = None,
+        tokens: Dict[str, Token] = None,
     ):
         self.host = host
         self.port = port
@@ -40,7 +37,7 @@ class WebsocketServer:
         self.runner = web.AppRunner(self.app)
 
         self.started = False
-        self.tokens = []  # type: List[Token]
+        self.tokens = tokens or {}  # type: Dict[str, Token]
 
     def _generate_handler(
         self: "WebsocketServer", route: Route
@@ -56,9 +53,7 @@ class WebsocketServer:
 
         return websocket_handler
 
-    async def start(
-        self: "WebsocketServer", routes: List[Route], num_tokens=1
-    ) -> List[Token]:
+    async def start(self: "WebsocketServer", routes: List[Route]) -> List[Token]:
         if self.started:
             raise Exception("already started")
 
@@ -66,8 +61,6 @@ class WebsocketServer:
         setup(app=self.app)
 
         self.started = True
-        for _ in range(num_tokens):
-            self.tokens.append(generate_token())
 
         for route in routes:
             self.app.add_routes([web.get(route.path, self._generate_handler(route))])

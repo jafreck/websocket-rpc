@@ -4,7 +4,7 @@ import os
 import ssl
 import sys
 import uuid
-from typing import List
+from typing import List, Dict, Tuple
 
 import aiohttp
 import pytest
@@ -62,18 +62,45 @@ async def empty_incoming_request_handler(data: bytes) -> None:
     pass
 
 
+async def test_incoming_message_handler(data: bytes):
+    return data + b"/answer"
+
+
+def generate_tokens(count: int) -> List[rpc.common.Token]:
+    return [
+        (str(uuid.uuid4()), rpc.common.Token(value=str(uuid.uuid4())))
+        for _ in range(count)
+    ]
+
+
+async def validate_token_hook(
+    self: rpc.server.WebsocketServer, request: web.Request
+) -> None:
+    client_token = request.headers["Authentication"]
+    client_id = request.headers["x-ms-node-id"]
+
+    if self.tokens[client_id].value != client_token:
+        raise Exception(f"invalid token: {client_token}")
+
+
 async def run_test_server(
     port: int,
     host: str = "localhost",
     ssl_context: ssl.SSLContext = None,
     routes: List[rpc.server.Route] = None,
-) -> List[rpc.common.Token]:
+    tokens: List[Tuple[str, rpc.common.Token]] = None,
+):
     print(f"Running test server on {host}:{port}, ssl={ssl_context is not None}")
     if routes is None:
         routes = [
             rpc.server.Route(path="/ws", handler=basic_websocket_request_responder)
         ]
-    server = rpc.main.WebsocketServer(host=host, port=port, ssl_context=ssl_context)
+    server = rpc.main.WebsocketServer(
+        host=host,
+        port=port,
+        ssl_context=ssl_context,
+        tokens=dict(tokens) if tokens else {},
+    )
     return await server.start(routes)
 
 
@@ -82,19 +109,20 @@ async def connect_test_client(
     host="localhost",
     path="/ws",
     ssl_context: ssl.SSLContext = None,
-    token: str = None,
+    token: Tuple[str, rpc.common.Token] = None,
     incoming_request_handler: rpc.common.IncomingRequestHandler = None,
 ) -> rpc.client.WebsocketClient:
     protocol = "https" if ssl_context is not None else "http"
 
-    if empty_incoming_request_handler is None:
+    if incoming_request_handler is None:
         incoming_request_handler = empty_incoming_request_handler
 
     client = rpc.main.WebsocketClient(
         connect_address=f"{protocol}://{host}:{port}{path}",
         incoming_request_handler=incoming_request_handler,
         ssl_context=ssl_context,
-        token=token,
+        token=token[1] if token else None,
+        id=token[0] if token else None,
     )
     await client.connect()
     return client
@@ -168,11 +196,13 @@ async def test_websocket_connection_multiple_concurrent_requests_success(
 async def test_basic_context_manager_client(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    tokens = await run_test_server(port=port, ssl_context=server_ssl_ctx)
+    tokens = generate_tokens(1)
+    await run_test_server(port=port, ssl_context=server_ssl_ctx, tokens=tokens)
     async with rpc.client.WebsocketClient(
         connect_address=f"https://localhost:{port}/ws",
         incoming_request_handler=empty_incoming_request_handler,
-        token=tokens[0],
+        token=tokens[0][1],
+        id=tokens[0][0],
         ssl_context=client_ssl_ctx,
     ) as client:
         response = await client.request(b"test")
@@ -272,10 +302,8 @@ def test_client_autoreconnects_after_connection_dropped():
 async def test_valid_token_accepted(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    tokens = await run_test_server(
-        port=port,
-        ssl_context=server_ssl_ctx,
-    )
+    tokens = generate_tokens(1)
+    await run_test_server(port=port, ssl_context=server_ssl_ctx, tokens=tokens)
 
     print(f"tokens {tokens}")
 
@@ -292,13 +320,6 @@ async def test_valid_token_accepted(
 async def test_invalid_token_rejected(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    async def validate_token_hook(
-        self: rpc.server.WebsocketServer, request: web.Request
-    ) -> None:
-        client_token = request.headers["Authentication"]
-        client_token = request.headers["x-ms-node-id"]
-        if client_token not in self.tokens:
-            raise Exception(f"invalid token: {client_token}")
 
     await run_test_server(
         port=port,
@@ -315,7 +336,7 @@ async def test_invalid_token_rejected(
         await connect_test_client(
             port=port,
             ssl_context=client_ssl_ctx,
-            token=rpc.common.Token(str(uuid.uuid4())),  # generate random Token
+            token=generate_tokens(1)[0],  # generate random Token
         )
 
 
@@ -337,9 +358,6 @@ async def test_server_generated_request_success(
 ):
     s_client = None  # type: rpc.server.ServerClient
 
-    async def test_incoming_message_handler(data: bytes):
-        return data + b"/answer"
-
     async def server_client_handler(
         request: web.Request,
         ws: web.WebSocketResponse,
@@ -353,10 +371,12 @@ async def test_server_generated_request_success(
         await s_client.receive_messages()
         return ws
 
-    tokens = await run_test_server(
+    tokens = generate_tokens(1)
+    await run_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
         routes=[rpc.server.Route(path="/ws", handler=server_client_handler)],
+        tokens=tokens,
     )
 
     await connect_test_client(
@@ -367,3 +387,56 @@ async def test_server_generated_request_success(
     )
 
     assert b"test/answer" == await s_client.request(b"test")
+
+
+@log_test_details
+async def test_concurrent_multi_generated_request_success(
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+):
+    s_clients = []  # type: List[rpc.server.ServerClient]
+
+    async def server_client_handler(
+        request: web.Request,
+        ws: web.WebSocketResponse,
+    ) -> web.WebSocketResponse:
+        nonlocal s_client
+        s_client = rpc.server.ServerClient(ws, test_incoming_message_handler)
+        s_client.initialize()
+
+        await s_client.receive_messages()
+        return ws
+
+    tokens = generate_tokens(10)
+    await run_test_server(
+        port=port,
+        ssl_context=server_ssl_ctx,
+        routes=[
+            rpc.server.Route(
+                path="/ws",
+                handler=server_client_handler,
+                pre_prepare_hook=validate_token_hook,
+            )
+        ],
+        tokens=tokens,
+    )
+
+    for i in range(10):
+        s_clients.append(
+            await connect_test_client(
+                port=port,
+                ssl_context=client_ssl_ctx,
+                token=tokens[i],  # use valid token
+                incoming_request_handler=test_incoming_message_handler,
+            )
+        )
+
+    request_tasks = []
+
+    for s_client in s_clients:
+        request_tasks.append(s_client.request(f"test{s_client.id}".encode()))
+
+    responses = await asyncio.gather(*request_tasks, return_exceptions=True)
+
+    for i, response in enumerate(responses):
+        s_client = s_clients[i]
+        assert f"test{s_client.id}/answer".encode() == response
