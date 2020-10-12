@@ -62,7 +62,7 @@ async def empty_incoming_request_handler(data: bytes) -> None:
     pass
 
 
-async def test_incoming_message_handler(data: bytes):
+async def simple_incoming_message_handler(data: bytes) -> bytes:
     return data + b"/answer"
 
 
@@ -363,9 +363,12 @@ async def test_server_generated_request_success(
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal s_client
-        client_token = request.headers["Authentication"]
         client_id = request.headers["x-ms-node-id"]
-        s_client = rpc.server.ServerClient(ws, test_incoming_message_handler)
+        s_client = rpc.server.ServerClient(
+            id=client_id,
+            websocket=ws,
+            incoming_request_handler=empty_incoming_request_handler,
+        )
         s_client.initialize()
 
         await s_client.receive_messages()
@@ -383,7 +386,7 @@ async def test_server_generated_request_success(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
-        incoming_request_handler=test_incoming_message_handler,
+        incoming_request_handler=simple_incoming_message_handler,
     )
 
     assert b"test/answer" == await s_client.request(b"test")
@@ -399,9 +402,15 @@ async def test_concurrent_multi_generated_request_success(
         request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
-        nonlocal s_client
-        s_client = rpc.server.ServerClient(ws, test_incoming_message_handler)
+        nonlocal s_clients
+        client_id = request.headers["x-ms-node-id"]
+        s_client = rpc.server.ServerClient(
+            websocket=ws,
+            incoming_request_handler=empty_incoming_request_handler,
+            id=client_id,
+        )
         s_client.initialize()
+        s_clients.append(s_client)
 
         await s_client.receive_messages()
         return ws
@@ -421,13 +430,11 @@ async def test_concurrent_multi_generated_request_success(
     )
 
     for i in range(10):
-        s_clients.append(
-            await connect_test_client(
-                port=port,
-                ssl_context=client_ssl_ctx,
-                token=tokens[i],  # use valid token
-                incoming_request_handler=test_incoming_message_handler,
-            )
+        await connect_test_client(
+            port=port,
+            ssl_context=client_ssl_ctx,
+            token=tokens[i],  # use valid token
+            incoming_request_handler=simple_incoming_message_handler,
         )
 
     request_tasks = []

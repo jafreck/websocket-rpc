@@ -102,16 +102,18 @@ from websocket_base import WebsocketBase
 class ServerClient:
     def __init__(
         self,
-        ws: web.WebSocketResponse,
+        id: str,
+        websocket: web.WebSocketResponse,
         incoming_request_handler: IncomingRequestHandler,
     ):
+        self.id = id
+        self.incoming_request_handler = incoming_request_handler
+
         self.request_dict = {}  # type: Dict[str, asyncio.Queue]
         self._receive_task = None
 
-        self.incoming_request_handler = incoming_request_handler
-
         self._base = WebsocketBase(
-            websocket=ws,
+            websocket=websocket,
             incoming_direction=Direction.NodeToServer,
             incoming_request_handler=incoming_request_handler,
         )
