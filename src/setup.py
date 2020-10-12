@@ -1,5 +1,7 @@
 import setuptools
 
+print(setuptools.find_namespace_packages())
+
 
 setuptools.setup(
     name="pywebsocket-rpc",
