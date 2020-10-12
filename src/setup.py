@@ -9,12 +9,13 @@ setuptools.setup(
     description="RPC over websockets",
     long_description_content_type="text/markdown",
     url="https://github.com/jafreck/websocket-rpc",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_namespace_packages(),
     install_requires=[
         "aiohttp",
         "aiohttp[speedups]",
         "protobuf",
         "pyopenssl",
+        "aiojobs",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

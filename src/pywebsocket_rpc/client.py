@@ -6,9 +6,9 @@ from typing import Dict
 import aiohttp
 import aiojobs
 
-from common import IncomingRequestHandler, Token, contstruct_node_message
-from proto.gen.node_pb2 import Direction, NodeMessage
-from websocket_base import WebsocketBase
+from .common import IncomingRequestHandler, Token, _contstruct_node_message
+from .proto.gen.node_pb2 import Direction
+from .websocket_base import WebsocketBase
 
 # constants
 _AUTHENTICATION_HEADER_KEY = "Authentication"
@@ -137,5 +137,5 @@ class WebsocketClient:
     async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()
         return await self._base.request(
-            contstruct_node_message(bytes=data, direction=Direction.NodeToServer)
+            _contstruct_node_message(bytes=data, direction=Direction.NodeToServer)
         )

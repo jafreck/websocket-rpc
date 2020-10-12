@@ -1,13 +1,13 @@
 import asyncio
 import ssl
-import uuid
 from typing import Awaitable, Callable, Dict, List, NamedTuple
 
 from aiohttp import WSMsgType, web
 from aiojobs.aiohttp import setup, spawn
 
-from common import Token, IncomingRequestHandler, contstruct_node_message
-from proto.gen.node_pb2 import NodeMessage, Direction
+from .common import IncomingRequestHandler, Token, _contstruct_node_message
+from .proto.gen.node_pb2 import Direction
+from .websocket_base import WebsocketBase
 
 _AioHttpWebsocketHandler = Callable[[web.Request], Awaitable[web.WebSocketResponse]]
 WebsocketHandler = Callable[
@@ -96,7 +96,6 @@ RESPONSE_TIMEOUT = 2
 Really all we need here is a handler that says for message in ws, recieve()
 and a serverclient that is created before running that
 """
-from websocket_base import WebsocketBase
 
 
 class ServerClient:
@@ -126,5 +125,5 @@ class ServerClient:
 
     async def request(self, data: bytes) -> bytes:
         return await self._base.request(
-            contstruct_node_message(data, Direction.ServerToNode)
+            _contstruct_node_message(data, Direction.ServerToNode)
         )

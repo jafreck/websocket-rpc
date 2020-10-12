@@ -13,14 +13,12 @@ from aiohttp import WSMsgType, web
 # TODO: not sure why pytest is complaining so much about imports,
 # but changing sys.path before local imports fixes the issue for now
 sys.path.append(os.path.realpath(os.path.dirname(__file__) + "/.."))
-sys.path.append(os.path.realpath(os.path.dirname(__file__) + "/../rpc"))
+sys.path.append(os.path.realpath(os.path.dirname(__file__) + "/../pywebsocket_rpc"))
 
-import rpc.client
-import rpc.common
-import rpc.main
-import rpc.proto.gen.node_pb2
-import rpc.server
-from rpc.websocket_base import WebsocketBase
+import pywebsocket_rpc.client
+import pywebsocket_rpc.common
+import pywebsocket_rpc.proto.gen.node_pb2
+import pywebsocket_rpc.server
 
 
 def log_test_details(func):
@@ -44,7 +42,7 @@ async def basic_websocket_request_responder(
     async for msg in ws:
         print(f"server received message: type={msg.type}, data={msg.data}")
         if msg.type == WSMsgType.BINARY:
-            node_msg = rpc.proto.gen.node_pb2.NodeMessage()
+            node_msg = pywebsocket_rpc.proto.gen.node_pb2.NodeMessage()
             node_msg.ParseFromString(msg.data)
             print(f"server received node_msg: {node_msg}")
             node_msg.bytes = node_msg.bytes + b"/answer"
@@ -66,15 +64,15 @@ async def simple_incoming_message_handler(data: bytes) -> bytes:
     return data + b"/answer"
 
 
-def generate_tokens(count: int) -> List[rpc.common.Token]:
+def generate_tokens(count: int) -> List[pywebsocket_rpc.common.Token]:
     return [
-        (str(uuid.uuid4()), rpc.common.Token(value=str(uuid.uuid4())))
+        (str(uuid.uuid4()), pywebsocket_rpc.common.Token(value=str(uuid.uuid4())))
         for _ in range(count)
     ]
 
 
 async def validate_token_hook(
-    self: rpc.server.WebsocketServer, request: web.Request
+    self: pywebsocket_rpc.server.WebsocketServer, request: web.Request
 ) -> None:
     client_token = request.headers["Authentication"]
     client_id = request.headers["x-ms-node-id"]
@@ -87,15 +85,17 @@ async def run_test_server(
     port: int,
     host: str = "localhost",
     ssl_context: ssl.SSLContext = None,
-    routes: List[rpc.server.Route] = None,
-    tokens: List[Tuple[str, rpc.common.Token]] = None,
+    routes: List[pywebsocket_rpc.server.Route] = None,
+    tokens: List[Tuple[str, pywebsocket_rpc.common.Token]] = None,
 ):
     print(f"Running test server on {host}:{port}, ssl={ssl_context is not None}")
     if routes is None:
         routes = [
-            rpc.server.Route(path="/ws", handler=basic_websocket_request_responder)
+            pywebsocket_rpc.server.Route(
+                path="/ws", handler=basic_websocket_request_responder
+            )
         ]
-    server = rpc.main.WebsocketServer(
+    server = pywebsocket_rpc.server.WebsocketServer(
         host=host,
         port=port,
         ssl_context=ssl_context,
@@ -109,15 +109,15 @@ async def connect_test_client(
     host="localhost",
     path="/ws",
     ssl_context: ssl.SSLContext = None,
-    token: Tuple[str, rpc.common.Token] = None,
-    incoming_request_handler: rpc.common.IncomingRequestHandler = None,
-) -> rpc.client.WebsocketClient:
+    token: Tuple[str, pywebsocket_rpc.common.Token] = None,
+    incoming_request_handler: pywebsocket_rpc.common.IncomingRequestHandler = None,
+) -> pywebsocket_rpc.client.WebsocketClient:
     protocol = "https" if ssl_context is not None else "http"
 
     if incoming_request_handler is None:
         incoming_request_handler = empty_incoming_request_handler
 
-    client = rpc.main.WebsocketClient(
+    client = pywebsocket_rpc.client.WebsocketClient(
         connect_address=f"{protocol}://{host}:{port}{path}",
         incoming_request_handler=incoming_request_handler,
         ssl_context=ssl_context,
@@ -176,7 +176,7 @@ async def test_websocket_connection_multiple_concurrent_requests_success(
         port=port,
         ssl_context=server_ssl_ctx,
         routes=[
-            rpc.server.Route(
+            pywebsocket_rpc.server.Route(
                 path="/ws",
                 handler=basic_websocket_request_responder,
             )
@@ -198,7 +198,7 @@ async def test_basic_context_manager_client(
 ):
     tokens = generate_tokens(1)
     await run_test_server(port=port, ssl_context=server_ssl_ctx, tokens=tokens)
-    async with rpc.client.WebsocketClient(
+    async with pywebsocket_rpc.client.WebsocketClient(
         connect_address=f"https://localhost:{port}/ws",
         incoming_request_handler=empty_incoming_request_handler,
         token=tokens[0][1],
@@ -228,7 +228,9 @@ async def test_dropped_websocket_connection_times_out(
     await run_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
-        routes=[rpc.server.Route(path="/ws", handler=drop_connection_handler)],
+        routes=[
+            pywebsocket_rpc.server.Route(path="/ws", handler=drop_connection_handler)
+        ],
     )
     client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
@@ -261,7 +263,11 @@ async def test_websocket_reconnect_after_connection_lost(
     await run_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
-        routes=[rpc.server.Route(path="/ws", handler=drop_first_connection_handler)],
+        routes=[
+            pywebsocket_rpc.server.Route(
+                path="/ws", handler=drop_first_connection_handler
+            )
+        ],
     )
     client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
 
@@ -325,7 +331,7 @@ async def test_invalid_token_rejected(
         port=port,
         ssl_context=server_ssl_ctx,
         routes=[
-            rpc.server.Route(
+            pywebsocket_rpc.server.Route(
                 path="/ws",
                 handler=basic_websocket_request_responder,
                 pre_prepare_hook=validate_token_hook,
@@ -356,7 +362,7 @@ async def test_multi_client_valid_token_success(
 async def test_server_generated_request_success(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    s_client = None  # type: rpc.server.ServerClient
+    s_client = None  # type: pywebsocket_rpc.server.ServerClient
 
     async def server_client_handler(
         request: web.Request,
@@ -364,7 +370,7 @@ async def test_server_generated_request_success(
     ) -> web.WebSocketResponse:
         nonlocal s_client
         client_id = request.headers["x-ms-node-id"]
-        s_client = rpc.server.ServerClient(
+        s_client = pywebsocket_rpc.server.ServerClient(
             id=client_id,
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
@@ -378,7 +384,9 @@ async def test_server_generated_request_success(
     await run_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
-        routes=[rpc.server.Route(path="/ws", handler=server_client_handler)],
+        routes=[
+            pywebsocket_rpc.server.Route(path="/ws", handler=server_client_handler)
+        ],
         tokens=tokens,
     )
 
@@ -396,7 +404,7 @@ async def test_server_generated_request_success(
 async def test_concurrent_multi_generated_request_success(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-    s_clients = []  # type: List[rpc.server.ServerClient]
+    s_clients = []  # type: List[pywebsocket_rpc.server.ServerClient]
 
     async def server_client_handler(
         request: web.Request,
@@ -404,7 +412,7 @@ async def test_concurrent_multi_generated_request_success(
     ) -> web.WebSocketResponse:
         nonlocal s_clients
         client_id = request.headers["x-ms-node-id"]
-        s_client = rpc.server.ServerClient(
+        s_client = pywebsocket_rpc.server.ServerClient(
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
             id=client_id,
@@ -420,7 +428,7 @@ async def test_concurrent_multi_generated_request_success(
         port=port,
         ssl_context=server_ssl_ctx,
         routes=[
-            rpc.server.Route(
+            pywebsocket_rpc.server.Route(
                 path="/ws",
                 handler=server_client_handler,
                 pre_prepare_hook=validate_token_hook,
