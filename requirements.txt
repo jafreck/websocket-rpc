@@ -1,5 +1,6 @@
 # production
 aiohttp
+aiojobs
 aiohttp[speedups]
 protobuf
 pyopenssl
@@ -12,3 +13,4 @@ pytest-aiohttp
 black
 trustme
 twine
+pylint-protobuf
