@@ -1,4 +1,4 @@
-// generate: protoc -I=src/rpc/proto --python_out=./src/rpc/proto/gen src/rpc/proto/node.proto
+// generate: protoc -I=src/pywebsocket_rpc/proto --python_out=./src/pywebsocket_rpc/proto/gen src/pywebsocket_rpc/proto/node.proto
 
 syntax = "proto2";
 
