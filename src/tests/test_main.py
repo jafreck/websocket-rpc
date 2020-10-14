@@ -4,11 +4,14 @@ import os
 import ssl
 import sys
 import uuid
-from typing import List, Dict, Tuple
+from contextlib import asynccontextmanager
+from typing import Callable, Dict, List, NamedTuple, Tuple
 
 import aiohttp
 import pytest
 from aiohttp import WSMsgType, web
+
+from test_proto.gen.test_pb2 import NodeHttpRequest, NodeHttpResponse
 
 # TODO: not sure why pytest is complaining so much about imports,
 # but changing sys.path before local imports fixes the issue for now
@@ -455,3 +458,127 @@ async def test_concurrent_multi_generated_request_success(
     for i, response in enumerate(responses):
         s_client = s_clients[i]
         assert f"test{s_client.id}/answer".encode() == response
+
+
+@log_test_details
+async def test_server_generated_request_make_http_request_success(
+    port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
+):
+    s_client = None  # type: pywebsocket_rpc.server.ServerClient
+
+    async def server_client_handler(
+        request: web.Request,
+        ws: web.WebSocketResponse,
+    ) -> web.WebSocketResponse:
+        nonlocal s_client
+        client_id = request.headers["x-ms-node-id"]
+        s_client = pywebsocket_rpc.server.ServerClient(
+            id=client_id,
+            websocket=ws,
+            incoming_request_handler=empty_incoming_request_handler,
+        )
+        s_client.initialize()
+
+        await s_client.receive_messages()
+        return ws
+
+    tokens = generate_tokens(1)
+    await run_test_server(
+        port=port,
+        ssl_context=server_ssl_ctx,
+        routes=[
+            pywebsocket_rpc.server.Route(path="/ws", handler=server_client_handler)
+        ],
+        tokens=tokens,
+    )
+
+    async def message_relay_handler(data: bytes) -> bytes:
+        """
+        deserialize bytes as a protobuf message
+        make an http call to another aiohttp web server on another port
+        """
+        node_http_req = NodeHttpRequest()
+        node_http_req.ParseFromString(data)
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.put(
+                    "http://localhost:8080/",
+                    data=node_http_req.body,
+                    headers=node_http_req.headers,
+                ) as resp:
+                    node_http_resp = NodeHttpResponse()
+                    node_http_resp.status_code = resp.status
+                    node_http_resp.body = await resp.read()
+
+                    print(f"node_http_req.headers={node_http_req.headers}")
+                    print(f"resp.headers.items()={resp.headers.items()}")
+                    for key, value in resp.headers.items():
+                        node_http_resp.headers[key] = value
+
+                    return node_http_resp.SerializeToString()
+
+            except Exception as e:
+                print(f"put failed with: {e}")
+
+    await connect_test_client(
+        port=port,
+        ssl_context=client_ssl_ctx,
+        token=tokens[0],  # use valid token
+        incoming_request_handler=message_relay_handler,
+    )
+
+    async def respond_success_handler(request: web.Request):
+        try:
+            resp = web.Response(
+                body=(await request.text() + "/answer").encode(),
+                status=200,
+                headers={"key2": "value2"},
+            )
+
+            return resp
+        except Exception as e:
+            print(f"exception raised when responding: {e}")
+            return web.Response(body="", status=500)
+
+    async with get_test_webserver(
+        port=8080,
+        routes=[
+            WebRoute(http_method=web.put, path="/", handler=respond_success_handler)
+        ],
+    ):
+        resp_bytes = await s_client.request(
+            NodeHttpRequest(headers={"key": "value"}, body=b"test").SerializeToString()
+        )
+
+    node_http_resp = NodeHttpResponse()
+    node_http_resp.ParseFromString(resp_bytes)
+    assert node_http_resp.status_code == 200
+    assert node_http_resp.body == b"test/answer"
+    assert node_http_resp.headers["key2"] == "value2"
+
+
+class WebRoute(NamedTuple):
+    WebHandler = Callable[[web.Request], web.Response]
+
+    path: str
+    handler: WebHandler
+    http_method: Callable[[str, WebHandler], None]
+
+
+@asynccontextmanager
+async def get_test_webserver(port: int, routes: List[WebRoute]) -> None:
+
+    app = web.Application()
+    for route in routes:
+        app.add_routes([route.http_method(route.path, route.handler)])
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", port)
+    await site.start()
+
+    try:
+        yield
+    finally:
+        await runner.cleanup()

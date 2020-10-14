@@ -53,7 +53,7 @@ class WebsocketServer:
 
         return websocket_handler
 
-    async def start(self: "WebsocketServer", routes: List[Route]) -> List[Token]:
+    async def start(self: "WebsocketServer", routes: List[Route]) -> None:
         if self.started:
             raise Exception("already started")
 
@@ -74,9 +74,7 @@ class WebsocketServer:
         )
         await site.start()
 
-        return self.tokens
-
-    async def serve(self, routes: List[Route]):
+    async def serve(self, routes: List[Route]) -> None:
         await self.start(routes)
         names = sorted(str(s.name) for s in self.runner.sites)
         print(
