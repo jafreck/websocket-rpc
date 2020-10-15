@@ -2,8 +2,8 @@ import asyncio
 import ssl
 from typing import Awaitable, Callable, Dict, List, NamedTuple
 
-from aiohttp import WSMsgType, web
-from aiojobs.aiohttp import setup, spawn
+from aiohttp import web
+from aiojobs.aiohttp import setup
 
 from .common import IncomingRequestHandler, Token, _contstruct_node_message
 from .proto.gen.node_pb2 import Direction
@@ -86,6 +86,16 @@ class WebsocketServer:
                 await asyncio.sleep(3600)  # sleep forever in 1 hour intervals
         finally:
             await self.runner.cleanup()
+
+    # async def __aenter__(self):
+    #     self._scheduler = await aiojobs.create_scheduler()
+    #     await self._connect()
+    #     return self
+
+    # async def __aexit__(self, exc_type, exc, tb):
+    #     await self.close()
+    #     await self._scheduler.close()
+    #     return self
 
 
 RESPONSE_TIMEOUT = 2

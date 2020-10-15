@@ -9,7 +9,6 @@ message NodeHttpRequest {
   map<string, string> headers = 11; // maybe this should be json or repeated kv pair
 }
 
-
 message NodeHttpResponse {
   optional bytes body = 10;
   map<string, string> headers = 11; // maybe this should be json or repeated kv pair

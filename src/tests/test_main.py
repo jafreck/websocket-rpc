@@ -393,14 +393,13 @@ async def test_server_generated_request_success(
         tokens=tokens,
     )
 
-    await connect_test_client(
+    async with await connect_test_client(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
         incoming_request_handler=simple_incoming_message_handler,
-    )
-
-    assert b"test/answer" == await s_client.request(b"test")
+    ):
+        assert b"test/answer" == await s_client.request(b"test")
 
 
 @log_test_details
@@ -493,10 +492,6 @@ async def test_server_generated_request_make_http_request_success(
     )
 
     async def message_relay_handler(data: bytes) -> bytes:
-        """
-        deserialize bytes as a protobuf message
-        make an http call to another aiohttp web server on another port
-        """
         node_http_req = NodeHttpRequest()
         node_http_req.ParseFromString(data)
 
