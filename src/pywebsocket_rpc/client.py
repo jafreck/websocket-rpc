@@ -108,7 +108,10 @@ class WebsocketClient:
 
     async def _websocket_monitor(self) -> None:
         while True:
-            await self._reconnect_websocket_if_needed()
+            try:
+                await self._reconnect_websocket_if_needed()
+            except Exception as e:
+                print(f"reconnect failed with exception: {e}")
             await asyncio.sleep(1)
 
     async def _reconnect_websocket_if_needed(self) -> None:
