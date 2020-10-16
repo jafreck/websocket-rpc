@@ -132,8 +132,9 @@ class WebsocketClient:
             _contstruct_node_message(data, Direction.NodeToServer)
         )
 
-    async def receive_messages(self):
+    async def receive_messages(self) -> None:
         """
         block on receiving messages over the websocket
         """
+        # TOOD: impl
         pass

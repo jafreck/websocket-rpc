@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import ssl
 import weakref
 from typing import Awaitable, Callable, Dict, List, NamedTuple
 
-from aiohttp import web, WSCloseCode
+from aiohttp import WSCloseCode, web
 from aiojobs.aiohttp import setup
 
 from .common import IncomingRequestHandler, Token, _contstruct_node_message
@@ -39,13 +41,13 @@ class WebsocketServer:
 
         self.routes = routes
         self.app = web.Application()
-        self.app["websockets"] = weakref.WeakSet()
+        self.app["websockets"] = weakref.WeakSet()  # store open connections
         self.app.on_shutdown.append(self.on_shutdown)
         self.runner = web.AppRunner(self.app)
         self.started = False
 
     def _generate_handler(
-        self: "WebsocketServer", route: Route
+        self: WebsocketServer, route: Route
     ) -> _AioHttpWebsocketHandler:
         async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             if route.pre_prepare_hook is not None:
@@ -63,7 +65,7 @@ class WebsocketServer:
 
         return websocket_handler
 
-    async def on_shutdown(self, app):
+    async def on_shutdown(self, app: web.Application) -> None:
         for ws in set(self.app["websockets"]):
             await ws.close(code=WSCloseCode.GOING_AWAY, message="Server shutdown")
 
@@ -101,11 +103,11 @@ class WebsocketServer:
         finally:
             await self.runner.cleanup()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> WebsocketServer:
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type, exc, tb) -> WebsocketServer:
         await self.runner.cleanup()
         return self
 
