@@ -55,6 +55,8 @@ class WebsocketBase:
                     break
                 elif ws_msg.type == WSMsgType.CLOSED:
                     break
+                elif ws_msg.type == WSMsgType.CLOSING:
+                    break
                 # TODO: handle all other message types
         except asyncio.CancelledError:
             print(f"{self._name}: {self._receive_messages.__name__} cancelled")
