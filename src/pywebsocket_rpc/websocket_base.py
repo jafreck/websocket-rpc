@@ -25,14 +25,14 @@ class WebsocketBase:
             "server" if self.incoming_direction == Direction.NodeToServer else "client"
         )
 
-    def initialize(self):
+    def initialize(self) -> None:
         loop = asyncio.get_event_loop()
         self._receive_task = loop.create_task(self._receive_messages())
 
-    async def recieve_messages(self):
+    async def recieve_messages(self) -> None:
         await self._receive_task
 
-    async def _receive_messages(self):
+    async def _receive_messages(self) -> None:
         print(f"{self._name} starting to receive messages")
         try:
             while self._ws is not None or self._ws.closed or self._receive_task.done():
@@ -54,6 +54,8 @@ class WebsocketBase:
                 elif ws_msg.type == WSMsgType.ERROR:
                     break
                 elif ws_msg.type == WSMsgType.CLOSED:
+                    break
+                elif ws_msg.type == WSMsgType.CLOSING:
                     break
                 # TODO: handle all other message types
         except asyncio.CancelledError:

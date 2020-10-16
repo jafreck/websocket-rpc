@@ -50,13 +50,11 @@ class WebsocketClient:
             print(
                 f"WebsocketClient.close encountered exception while cancelling _reconnect_websocket_task: {ex}"
             )
-            pass
         try:
             if self._ws is not None and not self._ws.closed:
                 await self._ws.close()
         except Exception as ex:
             print(f"WebsocketClient.close encountered exception while closing ws: {ex}")
-            pass
 
         try:
             await self.session.close()
@@ -64,7 +62,6 @@ class WebsocketClient:
             print(
                 f"WebsocketClient.close encountered exception while closing session: {ex}"
             )
-            pass
 
     async def connect(self):
         async with self._lock:
@@ -98,29 +95,24 @@ class WebsocketClient:
             print(f"Exception caught connecting to {self.connect_address}: {type(ex)}")
             raise ex
 
-        loop = asyncio.get_event_loop()
-
         self._base = WebsocketBase(
             websocket=self._ws,
             incoming_direction=Direction.ServerToNode,
             incoming_request_handler=self._incoming_request_handler,
         )
-
         self._base.initialize()
 
-        self._reconnect_websocket_task = loop.create_task(self._websocket_monitor())
+        self._reconnect_websocket_task = asyncio.get_event_loop().create_task(
+            self._websocket_monitor()
+        )
 
     async def _websocket_monitor(self) -> None:
         while True:
-            print("_websocket_monitor running...")
             await self._reconnect_websocket_if_needed()
             await asyncio.sleep(1)
-            print("_websocket_monitor done sleeping...")
 
     async def _reconnect_websocket_if_needed(self) -> None:
-        print("_reconnect_websocket_if_needed trying to take lock")
         async with self._lock:
-            print("_reconnect_websocket_if_needed took lock")
             if self._ws is None or self._ws.closed:
                 # TODO: cleanup existing requests?
                 # may need to take a lock here
@@ -137,5 +129,12 @@ class WebsocketClient:
     async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()
         return await self._base.request(
-            _contstruct_node_message(bytes=data, direction=Direction.NodeToServer)
+            _contstruct_node_message(data, Direction.NodeToServer)
         )
+
+    async def receive_messages(self) -> None:
+        """
+        block on receiving messages over the websocket
+        """
+        # TOOD: impl
+        pass

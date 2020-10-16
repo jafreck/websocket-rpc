@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import ssl
+import weakref
 from typing import Awaitable, Callable, Dict, List, NamedTuple
 
-from aiohttp import WSMsgType, web
-from aiojobs.aiohttp import setup, spawn
+from aiohttp import WSCloseCode, web
+from aiojobs.aiohttp import setup
 
 from .common import IncomingRequestHandler, Token, _contstruct_node_message
 from .proto.gen.node_pb2 import Direction
@@ -27,33 +30,46 @@ class WebsocketServer:
         self,
         host: str,
         port: int,
+        routes: List[Route],
         ssl_context: ssl.SSLContext = None,
         tokens: Dict[str, Token] = None,
     ):
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
-        self.app = web.Application()
-        self.runner = web.AppRunner(self.app)
-
-        self.started = False
         self.tokens = tokens or {}  # type: Dict[str, Token]
 
+        self.routes = routes
+        self.app = web.Application()
+        self.app["websockets"] = weakref.WeakSet()  # store open connections
+        self.app.on_shutdown.append(self.on_shutdown)
+        self.runner = web.AppRunner(self.app)
+        self.started = False
+
     def _generate_handler(
-        self: "WebsocketServer", route: Route
+        self: WebsocketServer, route: Route
     ) -> _AioHttpWebsocketHandler:
         async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             if route.pre_prepare_hook is not None:
                 await route.pre_prepare_hook(self, request)
             wsr = web.WebSocketResponse()
             await wsr.prepare(request)
-            if route.handler is not None:
-                return await route.handler(request, wsr)
+            request.app["websockets"].add(wsr)
+            try:
+                if route.handler is not None:
+                    return await route.handler(request, wsr)
+            finally:
+                request.app["websockets"].discard(wsr)
+
             return wsr
 
         return websocket_handler
 
-    async def start(self: "WebsocketServer", routes: List[Route]) -> None:
+    async def on_shutdown(self, app: web.Application) -> None:
+        for ws in set(self.app["websockets"]):
+            await ws.close(code=WSCloseCode.GOING_AWAY, message="Server shutdown")
+
+    async def start(self) -> None:
         if self.started:
             raise Exception("already started")
 
@@ -62,7 +78,7 @@ class WebsocketServer:
 
         self.started = True
 
-        for route in routes:
+        for route in self.routes:
             self.app.add_routes([web.get(route.path, self._generate_handler(route))])
 
         await self.runner.setup()
@@ -74,8 +90,8 @@ class WebsocketServer:
         )
         await site.start()
 
-    async def serve(self, routes: List[Route]) -> None:
-        await self.start(routes)
+    async def serve(self) -> None:
+        await self.start()
         names = sorted(str(s.name) for s in self.runner.sites)
         print(
             "======== Running on {} ========\n"
@@ -86,6 +102,14 @@ class WebsocketServer:
                 await asyncio.sleep(3600)  # sleep forever in 1 hour intervals
         finally:
             await self.runner.cleanup()
+
+    async def __aenter__(self) -> WebsocketServer:
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> WebsocketServer:
+        await self.runner.cleanup()
+        return self
 
 
 RESPONSE_TIMEOUT = 2
