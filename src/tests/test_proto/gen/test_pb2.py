@@ -16,10 +16,10 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='test.proto',
   package='node',
-  syntax='proto2',
+  syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\ntest.proto\x12\x04node\"\x84\x01\n\x0fNodeHttpRequest\x12\x0c\n\x04\x62ody\x18\n \x01(\x0c\x12\x33\n\x07headers\x18\x0b \x03(\x0b\x32\".node.NodeHttpRequest.HeadersEntry\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x9b\x01\n\x10NodeHttpResponse\x12\x0c\n\x04\x62ody\x18\n \x01(\x0c\x12\x34\n\x07headers\x18\x0b \x03(\x0b\x32#.node.NodeHttpResponse.HeadersEntry\x12\x13\n\x0bstatus_code\x18\x0c \x01(\x05\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01'
+  serialized_pb=b'\n\ntest.proto\x12\x04node\"\x84\x01\n\x0fNodeHttpRequest\x12\x0c\n\x04\x62ody\x18\n \x01(\x0c\x12\x33\n\x07headers\x18\x0b \x03(\x0b\x32\".node.NodeHttpRequest.HeadersEntry\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x9b\x01\n\x10NodeHttpResponse\x12\x0c\n\x04\x62ody\x18\n \x01(\x0c\x12\x34\n\x07headers\x18\x0b \x03(\x0b\x32#.node.NodeHttpResponse.HeadersEntry\x12\x13\n\x0bstatus_code\x18\x0c \x01(\x05\x1a.\n\x0cHeadersEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x62\x06proto3'
 )
 
 
@@ -55,7 +55,7 @@ _NODEHTTPREQUEST_HEADERSENTRY = _descriptor.Descriptor(
   ],
   serialized_options=b'8\001',
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -93,7 +93,7 @@ _NODEHTTPREQUEST = _descriptor.Descriptor(
   ],
   serialized_options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -132,7 +132,7 @@ _NODEHTTPRESPONSE_HEADERSENTRY = _descriptor.Descriptor(
   ],
   serialized_options=b'8\001',
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -177,7 +177,7 @@ _NODEHTTPRESPONSE = _descriptor.Descriptor(
   ],
   serialized_options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],

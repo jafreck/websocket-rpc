@@ -17,10 +17,10 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='node.proto',
   package='node',
-  syntax='proto2',
+  syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\nnode.proto\x12\x04node\"L\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x02(\t\x12\"\n\tdirection\x18\x02 \x02(\x0e\x32\x0f.node.Direction\x12\r\n\x05\x62ytes\x18\x64 \x01(\x0c*/\n\tDirection\x12\x10\n\x0cServerToNode\x10\x01\x12\x10\n\x0cNodeToServer\x10\x02'
+  serialized_pb=b'\n\nnode.proto\x12\x04node\"L\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x01(\t\x12\"\n\tdirection\x18\x02 \x01(\x0e\x32\x0f.node.Direction\x12\r\n\x05\x62ytes\x18\x64 \x01(\x0c*/\n\tDirection\x12\x10\n\x0cServerToNode\x10\x00\x12\x10\n\x0cNodeToServer\x10\x01\x62\x06proto3'
 )
 
 _DIRECTION = _descriptor.EnumDescriptor(
@@ -31,12 +31,12 @@ _DIRECTION = _descriptor.EnumDescriptor(
   create_key=_descriptor._internal_create_key,
   values=[
     _descriptor.EnumValueDescriptor(
-      name='ServerToNode', index=0, number=1,
+      name='ServerToNode', index=0, number=0,
       serialized_options=None,
       type=None,
       create_key=_descriptor._internal_create_key),
     _descriptor.EnumValueDescriptor(
-      name='NodeToServer', index=1, number=2,
+      name='NodeToServer', index=1, number=1,
       serialized_options=None,
       type=None,
       create_key=_descriptor._internal_create_key),
@@ -49,8 +49,8 @@ _DIRECTION = _descriptor.EnumDescriptor(
 _sym_db.RegisterEnumDescriptor(_DIRECTION)
 
 Direction = enum_type_wrapper.EnumTypeWrapper(_DIRECTION)
-ServerToNode = 1
-NodeToServer = 2
+ServerToNode = 0
+NodeToServer = 1
 
 
 
@@ -64,15 +64,15 @@ _NODEMESSAGE = _descriptor.Descriptor(
   fields=[
     _descriptor.FieldDescriptor(
       name='id', full_name='node.NodeMessage.id', index=0,
-      number=1, type=9, cpp_type=9, label=2,
+      number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
       name='direction', full_name='node.NodeMessage.direction', index=1,
-      number=2, type=14, cpp_type=8, label=2,
-      has_default_value=False, default_value=1,
+      number=2, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -91,7 +91,7 @@ _NODEMESSAGE = _descriptor.Descriptor(
   ],
   serialized_options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],

@@ -1,20 +1,19 @@
 // generate: protoc -I=src/pywebsocket_rpc/proto --python_out=./src/pywebsocket_rpc/proto/gen src/pywebsocket_rpc/proto/node.proto
 
-syntax = "proto2";
+syntax = "proto3";
 
 package node;
 
 
 enum Direction {
-  ServerToNode = 1;
-  NodeToServer = 2;
+  ServerToNode = 0;
+  NodeToServer = 1;
 }
 
 message NodeMessage {
-  required string id = 1;
-  required Direction direction = 2;
+  string id = 1;
+  Direction direction = 2;
 
-  optional bytes bytes = 100;
-  // TODO: add headers 
-  // TODO: add server timeout?
+  bytes bytes = 100;
+  // TODO: add timeout?
 }
