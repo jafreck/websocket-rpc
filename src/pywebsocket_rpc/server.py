@@ -10,7 +10,11 @@ import aiojobs
 from aiohttp import WSCloseCode, web
 
 from .common import IncomingRequestHandler, Token
-from .proto.gen.node_pb2 import Direction, NodeMessage, NodeMessageCompleteRequest
+from .proto.gen.node_pb2 import (
+    MessageDirection,
+    NodeMessage,
+    NodeMessageCompleteRequest,
+)
 from .websocket_base import WebsocketBase
 
 _AioHttpWebsocketHandler = Callable[[web.Request], Awaitable[web.WebSocketResponse]]
@@ -136,7 +140,7 @@ class ServerClient:
 
         self._base = WebsocketBase(
             websocket=websocket,
-            incoming_direction=Direction.NodeToServer,
+            incoming_direction=MessageDirection.NodeToServer,
             incoming_request_handler=incoming_request_handler,
             scheduler=scheduler,
         )
@@ -151,6 +155,6 @@ class ServerClient:
         print(f"server client sending request: {data}")
         node_msg = NodeMessage()
         node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
-        node_msg.direction = Direction.ServerToNode
+        node_msg.direction = MessageDirection.ServerToNode
 
         return await self._base.request(node_msg)

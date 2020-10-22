@@ -20,12 +20,12 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\nnode.proto\x12\x04node\"\xe4\x02\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x01(\t\x12\"\n\tdirection\x18\x02 \x01(\x0e\x32\x0f.node.Direction\x12\x37\n\rrequestHeader\x18\x64 \x01(\x0b\x32\x1e.node.NodeMessageRequestHeaderH\x00\x12\x39\n\x0eresponseHeader\x18\x65 \x01(\x0b\x32\x1f.node.NodeMessageResponseHeaderH\x00\x12)\n\x06packet\x18\x66 \x01(\x0b\x32\x17.node.NodeMessagePacketH\x00\x12\x37\n\x0b\x66ullRequest\x18h \x01(\x0b\x32 .node.NodeMessageCompleteRequestH\x00\x12\x39\n\x0c\x66ullResponse\x18i \x01(\x0b\x32!.node.NodeMessageCompleteResponseH\x00\x42\x12\n\x10message_contents\"7\n\x18NodeMessageRequestHeader\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\"3\n\x19NodeMessageResponseHeader\x12\x16\n\x0ehttpStatusCode\x18\x01 \x01(\x05\"\x17\n\x15NodeMessageCompletion\"\"\n\x11NodeMessagePacket\x12\r\n\x05\x62ytes\x18\x01 \x01(\x0c\"[\n\x1aNodeMessageCompleteRequest\x12.\n\x06header\x18\x01 \x01(\x0b\x32\x1e.node.NodeMessageRequestHeader\x12\r\n\x05\x62ytes\x18\x02 \x01(\x0c\"]\n\x1bNodeMessageCompleteResponse\x12/\n\x06header\x18\x01 \x01(\x0b\x32\x1f.node.NodeMessageResponseHeader\x12\r\n\x05\x62ytes\x18\x02 \x01(\x0c*/\n\tDirection\x12\x10\n\x0cServerToNode\x10\x00\x12\x10\n\x0cNodeToServer\x10\x01\x62\x06proto3'
+  serialized_pb=b'\n\nnode.proto\x12\x04node\"\x9e\x03\n\x0bNodeMessage\x12\n\n\x02id\x18\x01 \x01(\t\x12)\n\tdirection\x18\x02 \x01(\x0e\x32\x16.node.MessageDirection\x12\x37\n\rrequestHeader\x18\x64 \x01(\x0b\x32\x1e.node.NodeMessageRequestHeaderH\x00\x12\x39\n\x0eresponseHeader\x18\x65 \x01(\x0b\x32\x1f.node.NodeMessageResponseHeaderH\x00\x12)\n\x06packet\x18\x66 \x01(\x0b\x32\x17.node.NodeMessagePacketH\x00\x12\x31\n\ncompletion\x18g \x01(\x0b\x32\x1b.node.NodeMessageCompletionH\x00\x12\x37\n\x0b\x66ullRequest\x18h \x01(\x0b\x32 .node.NodeMessageCompleteRequestH\x00\x12\x39\n\x0c\x66ullResponse\x18i \x01(\x0b\x32!.node.NodeMessageCompleteResponseH\x00\x42\x12\n\x10message_contents\"\x17\n\x15NodeMessageCompletion\"7\n\x18NodeMessageRequestHeader\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\"3\n\x19NodeMessageResponseHeader\x12\x16\n\x0ehttpStatusCode\x18\x01 \x01(\x05\"\"\n\x11NodeMessagePacket\x12\r\n\x05\x62ytes\x18\x01 \x01(\x0c\"[\n\x1aNodeMessageCompleteRequest\x12.\n\x06header\x18\x01 \x01(\x0b\x32\x1e.node.NodeMessageRequestHeader\x12\r\n\x05\x62ytes\x18\x02 \x01(\x0c\"]\n\x1bNodeMessageCompleteResponse\x12/\n\x06header\x18\x01 \x01(\x0b\x32\x1f.node.NodeMessageResponseHeader\x12\r\n\x05\x62ytes\x18\x02 \x01(\x0c*6\n\x10MessageDirection\x12\x10\n\x0cServerToNode\x10\x00\x12\x10\n\x0cNodeToServer\x10\x01\x62\x06proto3'
 )
 
-_DIRECTION = _descriptor.EnumDescriptor(
-  name='Direction',
-  full_name='node.Direction',
+_MESSAGEDIRECTION = _descriptor.EnumDescriptor(
+  name='MessageDirection',
+  full_name='node.MessageDirection',
   filename=None,
   file=DESCRIPTOR,
   create_key=_descriptor._internal_create_key,
@@ -43,12 +43,12 @@ _DIRECTION = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=738,
-  serialized_end=785,
+  serialized_start=796,
+  serialized_end=850,
 )
-_sym_db.RegisterEnumDescriptor(_DIRECTION)
+_sym_db.RegisterEnumDescriptor(_MESSAGEDIRECTION)
 
-Direction = enum_type_wrapper.EnumTypeWrapper(_DIRECTION)
+MessageDirection = enum_type_wrapper.EnumTypeWrapper(_MESSAGEDIRECTION)
 ServerToNode = 0
 NodeToServer = 1
 
@@ -98,14 +98,21 @@ _NODEMESSAGE = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='fullRequest', full_name='node.NodeMessage.fullRequest', index=5,
+      name='completion', full_name='node.NodeMessage.completion', index=5,
+      number=103, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='fullRequest', full_name='node.NodeMessage.fullRequest', index=6,
       number=104, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='fullResponse', full_name='node.NodeMessage.fullResponse', index=6,
+      name='fullResponse', full_name='node.NodeMessage.fullResponse', index=7,
       number=105, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -129,7 +136,32 @@ _NODEMESSAGE = _descriptor.Descriptor(
     fields=[]),
   ],
   serialized_start=21,
-  serialized_end=377,
+  serialized_end=435,
+)
+
+
+_NODEMESSAGECOMPLETION = _descriptor.Descriptor(
+  name='NodeMessageCompletion',
+  full_name='node.NodeMessageCompletion',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=437,
+  serialized_end=460,
 )
 
 
@@ -167,8 +199,8 @@ _NODEMESSAGEREQUESTHEADER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=379,
-  serialized_end=434,
+  serialized_start=462,
+  serialized_end=517,
 )
 
 
@@ -199,33 +231,8 @@ _NODEMESSAGERESPONSEHEADER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=436,
-  serialized_end=487,
-)
-
-
-_NODEMESSAGECOMPLETION = _descriptor.Descriptor(
-  name='NodeMessageCompletion',
-  full_name='node.NodeMessageCompletion',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=489,
-  serialized_end=512,
+  serialized_start=519,
+  serialized_end=570,
 )
 
 
@@ -256,8 +263,8 @@ _NODEMESSAGEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=514,
-  serialized_end=548,
+  serialized_start=572,
+  serialized_end=606,
 )
 
 
@@ -295,8 +302,8 @@ _NODEMESSAGECOMPLETEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=550,
-  serialized_end=641,
+  serialized_start=608,
+  serialized_end=699,
 )
 
 
@@ -334,14 +341,15 @@ _NODEMESSAGECOMPLETERESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=643,
-  serialized_end=736,
+  serialized_start=701,
+  serialized_end=794,
 )
 
-_NODEMESSAGE.fields_by_name['direction'].enum_type = _DIRECTION
+_NODEMESSAGE.fields_by_name['direction'].enum_type = _MESSAGEDIRECTION
 _NODEMESSAGE.fields_by_name['requestHeader'].message_type = _NODEMESSAGEREQUESTHEADER
 _NODEMESSAGE.fields_by_name['responseHeader'].message_type = _NODEMESSAGERESPONSEHEADER
 _NODEMESSAGE.fields_by_name['packet'].message_type = _NODEMESSAGEPACKET
+_NODEMESSAGE.fields_by_name['completion'].message_type = _NODEMESSAGECOMPLETION
 _NODEMESSAGE.fields_by_name['fullRequest'].message_type = _NODEMESSAGECOMPLETEREQUEST
 _NODEMESSAGE.fields_by_name['fullResponse'].message_type = _NODEMESSAGECOMPLETERESPONSE
 _NODEMESSAGE.oneofs_by_name['message_contents'].fields.append(
@@ -354,6 +362,9 @@ _NODEMESSAGE.oneofs_by_name['message_contents'].fields.append(
   _NODEMESSAGE.fields_by_name['packet'])
 _NODEMESSAGE.fields_by_name['packet'].containing_oneof = _NODEMESSAGE.oneofs_by_name['message_contents']
 _NODEMESSAGE.oneofs_by_name['message_contents'].fields.append(
+  _NODEMESSAGE.fields_by_name['completion'])
+_NODEMESSAGE.fields_by_name['completion'].containing_oneof = _NODEMESSAGE.oneofs_by_name['message_contents']
+_NODEMESSAGE.oneofs_by_name['message_contents'].fields.append(
   _NODEMESSAGE.fields_by_name['fullRequest'])
 _NODEMESSAGE.fields_by_name['fullRequest'].containing_oneof = _NODEMESSAGE.oneofs_by_name['message_contents']
 _NODEMESSAGE.oneofs_by_name['message_contents'].fields.append(
@@ -362,13 +373,13 @@ _NODEMESSAGE.fields_by_name['fullResponse'].containing_oneof = _NODEMESSAGE.oneo
 _NODEMESSAGECOMPLETEREQUEST.fields_by_name['header'].message_type = _NODEMESSAGEREQUESTHEADER
 _NODEMESSAGECOMPLETERESPONSE.fields_by_name['header'].message_type = _NODEMESSAGERESPONSEHEADER
 DESCRIPTOR.message_types_by_name['NodeMessage'] = _NODEMESSAGE
+DESCRIPTOR.message_types_by_name['NodeMessageCompletion'] = _NODEMESSAGECOMPLETION
 DESCRIPTOR.message_types_by_name['NodeMessageRequestHeader'] = _NODEMESSAGEREQUESTHEADER
 DESCRIPTOR.message_types_by_name['NodeMessageResponseHeader'] = _NODEMESSAGERESPONSEHEADER
-DESCRIPTOR.message_types_by_name['NodeMessageCompletion'] = _NODEMESSAGECOMPLETION
 DESCRIPTOR.message_types_by_name['NodeMessagePacket'] = _NODEMESSAGEPACKET
 DESCRIPTOR.message_types_by_name['NodeMessageCompleteRequest'] = _NODEMESSAGECOMPLETEREQUEST
 DESCRIPTOR.message_types_by_name['NodeMessageCompleteResponse'] = _NODEMESSAGECOMPLETERESPONSE
-DESCRIPTOR.enum_types_by_name['Direction'] = _DIRECTION
+DESCRIPTOR.enum_types_by_name['MessageDirection'] = _MESSAGEDIRECTION
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 NodeMessage = _reflection.GeneratedProtocolMessageType('NodeMessage', (_message.Message,), {
@@ -377,6 +388,13 @@ NodeMessage = _reflection.GeneratedProtocolMessageType('NodeMessage', (_message.
   # @@protoc_insertion_point(class_scope:node.NodeMessage)
   })
 _sym_db.RegisterMessage(NodeMessage)
+
+NodeMessageCompletion = _reflection.GeneratedProtocolMessageType('NodeMessageCompletion', (_message.Message,), {
+  'DESCRIPTOR' : _NODEMESSAGECOMPLETION,
+  '__module__' : 'node_pb2'
+  # @@protoc_insertion_point(class_scope:node.NodeMessageCompletion)
+  })
+_sym_db.RegisterMessage(NodeMessageCompletion)
 
 NodeMessageRequestHeader = _reflection.GeneratedProtocolMessageType('NodeMessageRequestHeader', (_message.Message,), {
   'DESCRIPTOR' : _NODEMESSAGEREQUESTHEADER,
@@ -391,13 +409,6 @@ NodeMessageResponseHeader = _reflection.GeneratedProtocolMessageType('NodeMessag
   # @@protoc_insertion_point(class_scope:node.NodeMessageResponseHeader)
   })
 _sym_db.RegisterMessage(NodeMessageResponseHeader)
-
-NodeMessageCompletion = _reflection.GeneratedProtocolMessageType('NodeMessageCompletion', (_message.Message,), {
-  'DESCRIPTOR' : _NODEMESSAGECOMPLETION,
-  '__module__' : 'node_pb2'
-  # @@protoc_insertion_point(class_scope:node.NodeMessageCompletion)
-  })
-_sym_db.RegisterMessage(NodeMessageCompletion)
 
 NodeMessagePacket = _reflection.GeneratedProtocolMessageType('NodeMessagePacket', (_message.Message,), {
   'DESCRIPTOR' : _NODEMESSAGEPACKET,

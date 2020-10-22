@@ -8,7 +8,11 @@ import aiohttp
 import aiojobs
 
 from .common import IncomingRequestHandler, Token
-from .proto.gen.node_pb2 import Direction, NodeMessage, NodeMessageCompleteRequest
+from .proto.gen.node_pb2 import (
+    MessageDirection,
+    NodeMessage,
+    NodeMessageCompleteRequest,
+)
 from .websocket_base import WebsocketBase
 
 # constants
@@ -109,7 +113,7 @@ class WebsocketClient:
 
         self._base = WebsocketBase(
             websocket=self._ws,
-            incoming_direction=Direction.ServerToNode,
+            incoming_direction=MessageDirection.ServerToNode,
             incoming_request_handler=self._incoming_request_handler,
             scheduler=self._scheduler,
         )
@@ -148,7 +152,7 @@ class WebsocketClient:
 
         node_msg = NodeMessage(id=str(uuid.uuid4()))
         node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
-        node_msg.direction = Direction.NodeToServer
+        node_msg.direction = MessageDirection.NodeToServer
 
         print(f"node_msg={node_msg}")
         return await self._base.request(node_msg)

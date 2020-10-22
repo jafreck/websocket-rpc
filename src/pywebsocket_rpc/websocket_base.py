@@ -5,7 +5,7 @@ from aiohttp import WSMsgType, web, WSCloseCode
 import aiojobs
 from .common import IncomingRequestHandler
 from .proto.gen.node_pb2 import (
-    Direction,
+    MessageDirection,
     NodeMessage,
     NodeMessageCompleteResponse,
 )
@@ -15,7 +15,7 @@ class WebsocketBase:
     def __init__(
         self,
         websocket: web.WebSocketResponse,
-        incoming_direction: Direction,
+        incoming_direction: MessageDirection,
         incoming_request_handler: IncomingRequestHandler,
         scheduler: aiojobs.Scheduler,
     ):
@@ -29,7 +29,7 @@ class WebsocketBase:
 
         self._name = (
             "server_client"
-            if self.incoming_direction == Direction.NodeToServer
+            if self.incoming_direction == MessageDirection.NodeToServer
             else "client"
         )
 

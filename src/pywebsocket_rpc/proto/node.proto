@@ -5,23 +5,29 @@ syntax = "proto3";
 package node;
 
 
-enum Direction {
+
+enum MessageDirection {
   ServerToNode = 0;
   NodeToServer = 1;
 }
 
 message NodeMessage {
   string id = 1;
-  Direction direction = 2;
+  MessageDirection direction = 2;
 
   oneof message_contents {
     NodeMessageRequestHeader requestHeader = 100;
     NodeMessageResponseHeader responseHeader = 101;
     NodeMessagePacket packet = 102;
+      NodeMessageCompletion completion = 103;
     NodeMessageCompleteRequest fullRequest = 104;
     NodeMessageCompleteResponse fullResponse = 105;
   }
   // TODO: add timeout?
+}
+
+message NodeMessageCompletion {
+
 }
 
 message NodeMessageRequestHeader {
@@ -29,13 +35,8 @@ message NodeMessageRequestHeader {
   string method = 2;
 }
 
-
 message NodeMessageResponseHeader {
   int32 httpStatusCode = 1;
-}
-
-message NodeMessageCompletion {
-
 }
 
 message NodeMessagePacket {
@@ -46,7 +47,6 @@ message NodeMessageCompleteRequest {
   NodeMessageRequestHeader header = 1;
   bytes bytes = 2;
 }
-
 
 message NodeMessageCompleteResponse {
   NodeMessageResponseHeader header = 1;
