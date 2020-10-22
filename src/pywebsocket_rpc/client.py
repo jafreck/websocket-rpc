@@ -1,13 +1,14 @@
 import asyncio
 import ssl
+import traceback
 import uuid
 from typing import Dict
 
 import aiohttp
 import aiojobs
 
-from .common import IncomingRequestHandler, Token, _contstruct_node_message
-from .proto.gen.node_pb2 import Direction
+from .common import IncomingRequestHandler, Token
+from .proto.gen.node_pb2 import Direction, NodeMessage, NodeMessageCompleteRequest
 from .websocket_base import WebsocketBase
 
 # constants
@@ -44,8 +45,9 @@ class WebsocketClient:
         self._base = None  # type: WebsocketBase
 
     async def close(self) -> None:
+        print("client closing...")
         try:
-            self._reconnect_websocket_task.cancel()
+            await self._reconnect_websocket_task.close()
         except Exception as ex:
             print(
                 f"WebsocketClient.close encountered exception while cancelling _reconnect_websocket_task: {ex}"
@@ -73,6 +75,12 @@ class WebsocketClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        print(
+            f"__aexit__: exc_type={exc_type}, exc={exc}, tb={traceback.extract_tb(tb)}"
+        )
+
+        if exc is not None:
+            raise exc
         await self.close()
         await self._scheduler.close()
         return self
@@ -95,14 +103,19 @@ class WebsocketClient:
             print(f"Exception caught connecting to {self.connect_address}: {type(ex)}")
             raise ex
 
+        if self._scheduler is None:
+            # TODO: make this an init method?
+            self._scheduler = await aiojobs.create_scheduler()
+
         self._base = WebsocketBase(
             websocket=self._ws,
             incoming_direction=Direction.ServerToNode,
             incoming_request_handler=self._incoming_request_handler,
+            scheduler=self._scheduler,
         )
-        self._base.initialize()
+        await self._base.initialize()
 
-        self._reconnect_websocket_task = asyncio.get_event_loop().create_task(
+        self._reconnect_websocket_task = await self._scheduler.spawn(
             self._websocket_monitor()
         )
 
@@ -125,15 +138,20 @@ class WebsocketClient:
                 )
 
                 if self._reconnect_websocket_task is not None:
-                    self._reconnect_websocket_task.cancel()
+                    await self._reconnect_websocket_task.close()
 
                 await self._connect()
 
     async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()
-        return await self._base.request(
-            _contstruct_node_message(data, Direction.NodeToServer)
-        )
+        print(f"client sending request: {data}")
+
+        node_msg = NodeMessage(id=str(uuid.uuid4()))
+        node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
+        node_msg.direction = Direction.NodeToServer
+
+        print(f"node_msg={node_msg}")
+        return await self._base.request(node_msg)
 
     async def receive_messages(self) -> None:
         """
