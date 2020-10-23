@@ -1,5 +1,7 @@
 import asyncio
+import base64
 import functools
+import json
 import os
 import ssl
 import sys
@@ -84,9 +86,12 @@ async def simple_incoming_message_handler(data: bytes) -> bytes:
     return data + b"/answer"
 
 
-def generate_tokens(count: int) -> List[pywebsocket_rpc.common.Token]:
+def generate_tokens(count: int) -> List[Tuple[str, pywebsocket_rpc.common.Token]]:
     return [
-        (str(uuid.uuid4()), pywebsocket_rpc.common.Token(value=str(uuid.uuid4())))
+        (
+            str(uuid.uuid4()),
+            pywebsocket_rpc.common.Token.create_token(cluster_id=str(uuid.uuid4())),
+        )
         for _ in range(count)
     ]
 
@@ -95,7 +100,7 @@ async def validate_token_hook(
     self: pywebsocket_rpc.server.WebsocketServer, request: web.Request
 ) -> None:
     client_token = request.headers["Authentication"]
-    client_id = request.headers["x-ms-node-id"]
+    client_id = request.headers["x-ms-nodeidentifier"]
 
     if self.tokens[client_id].value != client_token:
         raise Exception(f"invalid token: {client_token}")
@@ -339,14 +344,20 @@ def test_client_autoreconnects_after_connection_dropped():
 ####################################
 
 
+def test_token_creation_and_claims():
+    token = pywebsocket_rpc.common.Token.create_token("mycluster")
+    claims_mapping = token.get_claims()
+
+    assert token.value.split(" ")[0] == "Bearer"
+    assert claims_mapping[pywebsocket_rpc.common.CLUSTER_ID_CLAIM_KEY] == "mycluster"
+
+
 @log_test_details
 async def test_valid_token_accepted(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     tokens = generate_tokens(1)
     async with get_test_server(port=port, ssl_context=server_ssl_ctx, tokens=tokens):
-        print(f"tokens {tokens}")
-
         async with get_test_client(
             port=port,
             ssl_context=client_ssl_ctx,
@@ -361,7 +372,6 @@ async def test_valid_token_accepted(
 async def test_invalid_token_rejected(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-
     async with get_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
@@ -406,7 +416,7 @@ async def test_server_generated_request_success(
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal s_client
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             id=client_id,
             websocket=ws,
@@ -426,7 +436,7 @@ async def test_server_generated_request_success(
             pywebsocket_rpc.server.Route(path="/ws", handler=server_client_handler)
         ],
         tokens=tokens,
-    ), await connect_test_client(
+    ), get_test_client(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
@@ -449,7 +459,7 @@ async def test_concurrent_multi_generated_request_success(
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal s_clients
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
@@ -490,6 +500,8 @@ async def test_concurrent_multi_generated_request_success(
 
         responses = await asyncio.gather(*request_tasks, return_exceptions=True)
 
+    assert len(responses) == 10
+
     for i, response in enumerate(responses):
         s_client = s_clients[i]
         assert f"test{s_client.id}/answer".encode() == response
@@ -508,7 +520,7 @@ async def test_server_generated_request_make_http_request_success(
     ) -> web.WebSocketResponse:
 
         nonlocal s_client
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             id=client_id,
             websocket=ws,

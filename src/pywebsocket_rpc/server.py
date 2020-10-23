@@ -78,7 +78,6 @@ class WebsocketServer:
 
     async def on_shutdown(self, app: web.Application) -> None:
         for ws in set(self.app["websockets"]):
-            print(f"server sending close to {ws}")
             await ws.close(code=WSCloseCode.GOING_AWAY, message="Server shutdown")
 
     async def start(self) -> None:
@@ -116,12 +115,7 @@ class WebsocketServer:
         return self
 
 
-RESPONSE_TIMEOUT = 2
-
-"""
-Really all we need here is a handler that says for message in ws, recieve()
-and a serverclient that is created before running that
-"""
+RESPONSE_TIMEOUT = 2  # TODO: make this configurable and part of the protocol
 
 
 class ServerClient:

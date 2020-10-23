@@ -17,7 +17,7 @@ from .websocket_base import WebsocketBase
 
 # constants
 _AUTHENTICATION_HEADER_KEY = "Authentication"
-_NODE_ID_HEADER_KEY = "x-ms-node-id"
+_NODE_ID_HEADER_KEY = "x-ms-nodeidentifier"
 
 
 class WebsocketClient:
