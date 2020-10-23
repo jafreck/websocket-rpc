@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import ssl
 import traceback
 import uuid
@@ -7,6 +8,7 @@ from typing import Dict
 import aiohttp
 import aiojobs
 
+from . import log
 from .common import IncomingRequestHandler, Token
 from .proto.gen.node_pb2 import (
     MessageDirection,
@@ -47,25 +49,28 @@ class WebsocketClient:
         self._scheduler = None  # type: aiojobs.Scheduler
 
         self._base = None  # type: WebsocketBase
+        self.log = log
 
     async def close(self) -> None:
-        print("client closing...")
+        log.info("client closing...")
         try:
             await self._reconnect_websocket_task.close()
         except Exception as ex:
-            print(
+            log.info(
                 f"WebsocketClient.close encountered exception while cancelling _reconnect_websocket_task: {ex}"
             )
         try:
             if self._ws is not None and not self._ws.closed:
                 await self._ws.close()
         except Exception as ex:
-            print(f"WebsocketClient.close encountered exception while closing ws: {ex}")
+            log.info(
+                f"WebsocketClient.close encountered exception while closing ws: {ex}"
+            )
 
         try:
             await self.session.close()
         except Exception as ex:
-            print(
+            log.info(
                 f"WebsocketClient.close encountered exception while closing session: {ex}"
             )
 
@@ -79,18 +84,20 @@ class WebsocketClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        print(
+        log.info(
             f"__aexit__: exc_type={exc_type}, exc={exc}, tb={traceback.extract_tb(tb)}"
         )
+        await self._scheduler.close()
+        await self.close()
 
         if exc is not None:
             raise exc
-        await self.close()
-        await self._scheduler.close()
         return self
 
     async def _connect(self) -> None:
-        print(f"connecting to {self.connect_address}, ssl_context={self.ssl_context}")
+        log.info(
+            f"connecting to {self.connect_address}, ssl_context={self.ssl_context}"
+        )
         try:
             headers = {}
             if self.token is not None:
@@ -104,7 +111,9 @@ class WebsocketClient:
                 headers=headers,
             )
         except Exception as ex:
-            print(f"Exception caught connecting to {self.connect_address}: {type(ex)}")
+            log.info(
+                f"Exception caught connecting to {self.connect_address}: {type(ex)}"
+            )
             raise ex
 
         if self._scheduler is None:
@@ -128,7 +137,7 @@ class WebsocketClient:
             try:
                 await self._reconnect_websocket_if_needed()
             except Exception as e:
-                print(f"reconnect failed with exception: {e}")
+                log.info(f"reconnect failed with exception: {e}")
             await asyncio.sleep(1)
 
     async def _reconnect_websocket_if_needed(self) -> None:
@@ -136,7 +145,7 @@ class WebsocketClient:
             if self._ws is None or self._ws.closed:
                 # TODO: cleanup existing requests?
                 # may need to take a lock here
-                print(
+                log.info(
                     f"Reconnecting websocket: self._ws={self._ws}, "
                     + f"self._ws.closed={self._ws.closed if self._ws else None}, "
                 )
@@ -148,13 +157,13 @@ class WebsocketClient:
 
     async def request(self, data: bytes) -> bytes:
         await self._reconnect_websocket_if_needed()
-        print(f"client sending request: {data}")
+        log.info(f"client sending request: {data}")
 
         node_msg = NodeMessage(id=str(uuid.uuid4()))
         node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
         node_msg.direction = MessageDirection.NodeToServer
 
-        print(f"node_msg={node_msg}")
+        log.info(f"node_msg={node_msg}")
         return await self._base.request(node_msg)
 
     async def receive_messages(self) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import ssl
 import traceback
 import weakref
@@ -9,6 +10,7 @@ from typing import Awaitable, Callable, Dict, List, NamedTuple
 import aiojobs
 from aiohttp import WSCloseCode, web
 
+from . import log
 from .common import IncomingRequestHandler, Token
 from .proto.gen.node_pb2 import (
     MessageDirection,
@@ -52,6 +54,8 @@ class WebsocketServer:
         self.runner = web.AppRunner(self.app)
         self.started = False
 
+        self.log = log
+
     def _generate_handler(
         self: WebsocketServer, route: Route
     ) -> _AioHttpWebsocketHandler:
@@ -65,7 +69,7 @@ class WebsocketServer:
                 if route.handler is not None:
                     return await route.handler(self, request, wsr)
             except Exception as e:
-                print(
+                log.info(
                     f"handler exception={type(e)}, {e}, {traceback.extract_tb(e.__traceback__)}"
                 )
                 raise
@@ -106,7 +110,7 @@ class WebsocketServer:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> WebsocketServer:
-        print(
+        log.info(
             f"__aexit__: exc_type={exc_type}, exc={exc}, tb={traceback.extract_tb(tb)}"
         )
         await self.runner.cleanup()
@@ -138,6 +142,7 @@ class ServerClient:
             incoming_request_handler=incoming_request_handler,
             scheduler=scheduler,
         )
+        self.log = log
 
     async def initialize(self):
         await self._base.initialize()
@@ -146,7 +151,7 @@ class ServerClient:
         await self._base.recieve_messages()
 
     async def request(self, data: bytes) -> bytes:
-        print(f"server client sending request: {data}")
+        log.info(f"server client sending request: {data}")
         node_msg = NodeMessage()
         node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
         node_msg.direction = MessageDirection.ServerToNode

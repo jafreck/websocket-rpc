@@ -1,9 +1,6 @@
-# from .common import IncomingRequestHandler, Token
-# from .client import WebsocketClient
-# from .server import (
-#     PrePrepareHook,
-#     Route,
-#     ServerClient,
-#     WebsocketHandler,
-#     WebsocketServer,
-# )
+# Set default logging handler to avoid "No handler found" warnings.
+import logging
+from logging import NullHandler, StreamHandler
+
+log = logging.getLogger(__name__)
+log.addHandler(NullHandler())

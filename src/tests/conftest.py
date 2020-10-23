@@ -1,5 +1,6 @@
+import logging
 import ssl
-
+import functools
 import pytest
 import trustme
 
@@ -44,3 +45,20 @@ def client_ssl_ctx(tls_certificate_authority: trustme.CA) -> ssl.SSLContext:
     ssl_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
     tls_certificate_authority.configure_trust(ssl_ctx)
     return ssl_ctx
+
+
+from logging import StreamHandler
+
+
+@pytest.fixture()
+def logger():
+    lgr = logging.getLogger(__name__)
+    lgr.setLevel(logging.INFO)
+    stream_handler = StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    stream_handler.setFormatter(formatter)
+    lgr.addHandler(stream_handler)
+
+    return lgr
