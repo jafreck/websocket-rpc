@@ -1,13 +1,16 @@
 import asyncio
+import base64
 import functools
+import json
 import os
 import ssl
 import sys
 import uuid
 from contextlib import asynccontextmanager
-from typing import Callable, Dict, List, NamedTuple, Tuple
+from typing import Callable, List, NamedTuple, Tuple
 
 import aiohttp
+import aiojobs.aiohttp
 import pytest
 from aiohttp import WSMsgType, web
 
@@ -35,6 +38,7 @@ def log_test_details(func):
 
 
 async def basic_websocket_request_responder(
+    self,
     request: web.Request,
     ws: web.WebSocketResponse,
 ) -> None:
@@ -42,21 +46,36 @@ async def basic_websocket_request_responder(
     A websocket route handler that responds to a request byte string, x,
     with "x/answer"
     """
-    async for msg in ws:
-        print(f"server received message: type={msg.type}, data={msg.data}")
-        if msg.type == WSMsgType.BINARY:
-            node_msg = pywebsocket_rpc.proto.gen.node_pb2.NodeMessage()
-            node_msg.ParseFromString(msg.data)
-            print(f"server received node_msg: {node_msg}")
-            node_msg.bytes = node_msg.bytes + b"/answer"
-            await ws.send_bytes(node_msg.SerializeToString())
+    try:
+        async for msg in ws:
+            print(
+                f"basic_websocket_request_responder received message: type={msg.type}, data={msg.data}"
+            )
+            if msg.type == WSMsgType.BINARY:
+                node_msg = pywebsocket_rpc.proto.gen.node_pb2.NodeMessage()
+                node_msg.ParseFromString(msg.data)
+                print(f"server received node_msg: {node_msg}")
+                node_msg.fullResponse.CopyFrom(
+                    pywebsocket_rpc.proto.gen.node_pb2.NodeMessageCompleteResponse(
+                        bytes=node_msg.fullRequest.bytes + b"/answer"
+                    )
+                )
+                await ws.send_bytes(node_msg.SerializeToString())
 
-        elif msg.type == WSMsgType.ERROR:
-            print("simple_websocket_test_handler received error, closing")
-            break
-        elif msg.type == aiohttp.WSMsgType.CLOSED:
-            print("simple_websocket_test_handler received closed, closing")
-            break
+            elif msg.type == WSMsgType.ERROR:
+                print("basic_websocket_request_responder received error, closing")
+                break
+            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                print("basic_websocket_request_responder received closed, closing")
+                break
+            elif msg.type == aiohttp.WSMsgType.CLOSING:
+                print("basic_websocket_request_responder received closing, closing")
+                break
+    except Exception as e:
+        # print(e)
+        raise
+
+    print("basic_websocket_request_responder done receiving messages")
 
 
 async def empty_incoming_request_handler(data: bytes) -> None:
@@ -67,9 +86,12 @@ async def simple_incoming_message_handler(data: bytes) -> bytes:
     return data + b"/answer"
 
 
-def generate_tokens(count: int) -> List[pywebsocket_rpc.common.Token]:
+def generate_tokens(count: int) -> List[Tuple[str, pywebsocket_rpc.common.Token]]:
     return [
-        (str(uuid.uuid4()), pywebsocket_rpc.common.Token(value=str(uuid.uuid4())))
+        (
+            str(uuid.uuid4()),
+            pywebsocket_rpc.common.Token.create_token(cluster_id=str(uuid.uuid4())),
+        )
         for _ in range(count)
     ]
 
@@ -78,7 +100,7 @@ async def validate_token_hook(
     self: pywebsocket_rpc.server.WebsocketServer, request: web.Request
 ) -> None:
     client_token = request.headers["Authentication"]
-    client_id = request.headers["x-ms-node-id"]
+    client_id = request.headers["x-ms-nodeidentifier"]
 
     if self.tokens[client_id].value != client_token:
         raise Exception(f"invalid token: {client_token}")
@@ -108,7 +130,7 @@ def get_test_server(
     )
 
 
-def get_tet_client(
+def get_test_client(
     port: int,
     host="localhost",
     path="/ws",
@@ -137,7 +159,7 @@ async def connect_test_client(
     token: Tuple[str, pywebsocket_rpc.common.Token] = None,
     incoming_request_handler: pywebsocket_rpc.common.IncomingRequestHandler = None,
 ) -> pywebsocket_rpc.client.WebsocketClient:
-    client = get_tet_client(**locals())
+    client = get_test_client(**locals())
     await client.connect()
     return client
 
@@ -149,9 +171,13 @@ async def connect_test_client(
 
 @log_test_details
 async def test_simple_client_server_no_ssl(port: int):
-    async with get_test_server(port=port, ssl_context=None):
-        print("started server")
-        client = await connect_test_client(port=port, ssl_context=None)
+    async with get_test_server(
+        port=port,
+        ssl_context=None,
+    ), get_test_client(port=port, ssl_context=None) as client:
+        # async with get_test_client(port=port, ssl_context=None)
+        # await client.receive_messages()
+
         response = await client.request(b"test")
 
     assert response == b"test/answer"
@@ -162,8 +188,8 @@ async def test_simple_client_server_with_ssl(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     async with get_test_server(port=port, ssl_context=server_ssl_ctx):
-        client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
-        response = await client.request(b"test")
+        async with get_test_client(port=port, ssl_context=client_ssl_ctx) as client:
+            response = await client.request(b"test")
 
     assert response == b"test/answer"
 
@@ -173,11 +199,10 @@ async def test_two_client_requests_correct_response(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     async with get_test_server(port=port, ssl_context=server_ssl_ctx):
-        client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
-
-        response1_task = client.request(b"test")
-        response2_task = client.request(b"test2")
-        results = await asyncio.gather(response1_task, response2_task)
+        async with get_test_client(port=port, ssl_context=client_ssl_ctx) as client:
+            response1_task = client.request(b"test")
+            response2_task = client.request(b"test2")
+            results = await asyncio.gather(response1_task, response2_task)
 
     assert results[0] == b"test/answer"
     assert results[1] == b"test2/answer"
@@ -197,13 +222,12 @@ async def test_websocket_connection_multiple_concurrent_requests_success(
             )
         ],
     ):
-        client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
-
-        results = await asyncio.gather(
-            client.request(b"test0"),
-            client.request(b"test1"),
-            client.request(b"test2"),
-        )
+        async with get_test_client(port=port, ssl_context=client_ssl_ctx) as client:
+            results = await asyncio.gather(
+                client.request(b"test0"),
+                client.request(b"test1"),
+                client.request(b"test2"),
+            )
 
     for i, result in enumerate(results):
         assert result == f"test{i}/answer".encode("utf-8")
@@ -249,10 +273,9 @@ async def test_dropped_websocket_connection_times_out(
             pywebsocket_rpc.server.Route(path="/ws", handler=drop_connection_handler)
         ],
     ):
-        client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
-
-        with pytest.raises(asyncio.TimeoutError):
-            await client.request(b"test")
+        async with get_test_client(port=port, ssl_context=client_ssl_ctx) as client:
+            with pytest.raises(asyncio.TimeoutError):
+                await client.request(b"test")
 
 
 @log_test_details
@@ -262,6 +285,7 @@ async def test_websocket_reconnect_after_connection_lost(
     connection_count = 0
 
     async def drop_first_connection_handler(
+        self,
         request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
@@ -272,7 +296,7 @@ async def test_websocket_reconnect_after_connection_lost(
             connection_count += 1
             return ws
 
-        await basic_websocket_request_responder(request, ws)
+        await basic_websocket_request_responder(self, request, ws)
 
         print("websocket connection closed")
         return ws
@@ -286,18 +310,17 @@ async def test_websocket_reconnect_after_connection_lost(
             )
         ],
     ):
-        client = await connect_test_client(port=port, ssl_context=client_ssl_ctx)
+        async with get_test_client(port=port, ssl_context=client_ssl_ctx) as client:
+            response1_task = client.request(b"test")
+            response2_task = client.request(b"test2")
+            response3_task = client.request(b"test3")
 
-        response1_task = client.request(b"test")
-        response2_task = client.request(b"test2")
-        response3_task = client.request(b"test3")
+            with pytest.raises(asyncio.TimeoutError):
+                await response1_task
 
-        with pytest.raises(asyncio.TimeoutError):
-            await response1_task
-
-        results = await asyncio.gather(
-            response2_task, response3_task, return_exceptions=True
-        )
+            results = await asyncio.gather(
+                response2_task, response3_task, return_exceptions=True
+            )
 
     assert connection_count == 1
     assert results[0] == b"test2/answer"
@@ -321,28 +344,34 @@ def test_client_autoreconnects_after_connection_dropped():
 ####################################
 
 
+def test_token_creation_and_claims():
+    token = pywebsocket_rpc.common.Token.create_token("mycluster")
+    claims_mapping = token.get_claims()
+
+    assert token.value.split(" ")[0] == "Bearer"
+    assert claims_mapping[pywebsocket_rpc.common.CLUSTER_ID_CLAIM_KEY] == "mycluster"
+
+
 @log_test_details
 async def test_valid_token_accepted(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
     tokens = generate_tokens(1)
     async with get_test_server(port=port, ssl_context=server_ssl_ctx, tokens=tokens):
-        print(f"tokens {tokens}")
-
-        client = await connect_test_client(
+        async with get_test_client(
             port=port,
             ssl_context=client_ssl_ctx,
             token=tokens[0],  # use valid token
-        )
+        ) as client:
+            response = await client.request(b"test")
 
-        assert await client.request(b"test") == b"test/answer"
+    assert response == b"test/answer"
 
 
 @log_test_details
 async def test_invalid_token_rejected(
     port: int, server_ssl_ctx: ssl.SSLContext, client_ssl_ctx: ssl.SSLContext
 ):
-
     async with get_test_server(
         port=port,
         ssl_context=server_ssl_ctx,
@@ -355,11 +384,12 @@ async def test_invalid_token_rejected(
         ],
     ):
         with pytest.raises(aiohttp.WSServerHandshakeError):
-            await connect_test_client(
+            async with get_test_client(
                 port=port,
                 ssl_context=client_ssl_ctx,
                 token=generate_tokens(1)[0],  # generate random Token
-            )
+            ):
+                pass
 
 
 @log_test_details
@@ -381,17 +411,19 @@ async def test_server_generated_request_success(
     s_client = None  # type: pywebsocket_rpc.server.ServerClient
 
     async def server_client_handler(
+        self,
         request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal s_client
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             id=client_id,
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
+            scheduler=aiojobs.aiohttp.get_scheduler_from_request(request),
         )
-        s_client.initialize()
+        await s_client.initialize()
 
         await s_client.receive_messages()
         return ws
@@ -404,13 +436,15 @@ async def test_server_generated_request_success(
             pywebsocket_rpc.server.Route(path="/ws", handler=server_client_handler)
         ],
         tokens=tokens,
-    ), await connect_test_client(
+    ), get_test_client(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
         incoming_request_handler=simple_incoming_message_handler,
     ):
-        assert b"test/answer" == await s_client.request(b"test")
+        response = await s_client.request(b"test")
+
+    assert response == b"test/answer"
 
 
 @log_test_details
@@ -420,17 +454,19 @@ async def test_concurrent_multi_generated_request_success(
     s_clients = []  # type: List[pywebsocket_rpc.server.ServerClient]
 
     async def server_client_handler(
+        self,
         request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
         nonlocal s_clients
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
             id=client_id,
+            scheduler=aiojobs.aiohttp.get_scheduler_from_request(request),
         )
-        s_client.initialize()
+        await s_client.initialize()
         s_clients.append(s_client)
 
         await s_client.receive_messages()
@@ -464,6 +500,8 @@ async def test_concurrent_multi_generated_request_success(
 
         responses = await asyncio.gather(*request_tasks, return_exceptions=True)
 
+    assert len(responses) == 10
+
     for i, response in enumerate(responses):
         s_client = s_clients[i]
         assert f"test{s_client.id}/answer".encode() == response
@@ -476,19 +514,24 @@ async def test_server_generated_request_make_http_request_success(
     s_client = None  # type: pywebsocket_rpc.server.ServerClient
 
     async def server_client_handler(
+        self,
         request: web.Request,
         ws: web.WebSocketResponse,
     ) -> web.WebSocketResponse:
+
         nonlocal s_client
-        client_id = request.headers["x-ms-node-id"]
+        client_id = request.headers["x-ms-nodeidentifier"]
         s_client = pywebsocket_rpc.server.ServerClient(
             id=client_id,
             websocket=ws,
             incoming_request_handler=empty_incoming_request_handler,
+            scheduler=aiojobs.aiohttp.get_scheduler_from_request(request),
         )
-        s_client.initialize()
+        print("initializing s_client")
+        await s_client.initialize()
 
         await s_client.receive_messages()
+        print("server_client_handler done")
         return ws
 
     async def message_relay_handler(data: bytes) -> bytes:
@@ -537,7 +580,7 @@ async def test_server_generated_request_make_http_request_success(
             pywebsocket_rpc.server.Route(path="/ws", handler=server_client_handler)
         ],
         tokens=tokens,
-    ), get_tet_client(
+    ), get_test_client(
         port=port,
         ssl_context=client_ssl_ctx,
         token=tokens[0],  # use valid token
@@ -548,15 +591,17 @@ async def test_server_generated_request_make_http_request_success(
             WebRoute(http_method=web.put, path="/", handler=respond_success_handler)
         ],
     ):
+        print("running web server")
+        print(f"about to use server_client={s_client}")
         resp_bytes = await s_client.request(
             NodeHttpRequest(headers={"key": "value"}, body=b"test").SerializeToString()
         )
 
-        node_http_resp = NodeHttpResponse()
-        node_http_resp.ParseFromString(resp_bytes)
-        assert node_http_resp.status_code == 200
-        assert node_http_resp.body == b"test/answer"
-        assert node_http_resp.headers["key2"] == "value2"
+    node_http_resp = NodeHttpResponse()
+    node_http_resp.ParseFromString(resp_bytes)
+    assert node_http_resp.status_code == 200
+    assert node_http_resp.body == b"test/answer"
+    assert node_http_resp.headers["key2"] == "value2"
 
 
 class WebRoute(NamedTuple):

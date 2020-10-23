@@ -1,22 +1,22 @@
-import uuid
-from typing import Awaitable, Callable, NamedTuple
-
-from .proto.gen.node_pb2 import Direction, NodeMessage
+import base64
+import json
+from typing import Any, Awaitable, Callable, Dict, List, NamedTuple, Union
 
 IncomingRequestHandler = Callable[[bytes], Awaitable[bytes]]
+JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
+
+CLUSTER_ID_CLAIM_KEY = "x-ms-clusterid"
 
 
 class Token(NamedTuple):
-    value: str
+    value: str  # base 64 encoded string representing a json object with required claims (x-ms-clusterid)
 
+    @staticmethod
+    def create_token(cluster_id: str) -> "Token":
+        val = base64.b64encode(
+            json.dumps({CLUSTER_ID_CLAIM_KEY: cluster_id}).encode("utf-8")
+        ).decode()
+        return Token(value=f"Bearer {val}")
 
-def _contstruct_node_message(data: bytes, direction: Direction, id=None) -> NodeMessage:
-    node_msg = NodeMessage()
-    if id is None:
-        node_msg.id = str(uuid.uuid4())
-    else:
-        node_msg.id = id
-    node_msg.bytes = data
-    node_msg.direction = direction
-
-    return node_msg
+    def get_claims(self) -> Dict[str, JSONType]:
+        return json.loads(base64.standard_b64decode(self.value.split(" ")[1]))

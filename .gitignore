@@ -5,5 +5,8 @@
 dist/*
 build/*
 
+
+.vscode/.ropeproject
+
 # virtualenv
 env/*

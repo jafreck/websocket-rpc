@@ -2,19 +2,25 @@ from __future__ import annotations
 
 import asyncio
 import ssl
+import traceback
 import weakref
 from typing import Awaitable, Callable, Dict, List, NamedTuple
 
+import aiojobs
 from aiohttp import WSCloseCode, web
-from aiojobs.aiohttp import setup
 
-from .common import IncomingRequestHandler, Token, _contstruct_node_message
-from .proto.gen.node_pb2 import Direction
+from .common import IncomingRequestHandler, Token
+from .proto.gen.node_pb2 import (
+    MessageDirection,
+    NodeMessage,
+    NodeMessageCompleteRequest,
+)
 from .websocket_base import WebsocketBase
 
 _AioHttpWebsocketHandler = Callable[[web.Request], Awaitable[web.WebSocketResponse]]
 WebsocketHandler = Callable[
-    [web.Request, web.WebSocketResponse], Awaitable[web.WebSocketResponse]
+    ["WebsocketServer", web.Request, web.WebSocketResponse],
+    Awaitable[web.WebSocketResponse],
 ]
 PrePrepareHook = Callable[["WebsocketServer", web.Request], Awaitable[None]]
 
@@ -57,7 +63,12 @@ class WebsocketServer:
             request.app["websockets"].add(wsr)
             try:
                 if route.handler is not None:
-                    return await route.handler(request, wsr)
+                    return await route.handler(self, request, wsr)
+            except Exception as e:
+                print(
+                    f"handler exception={type(e)}, {e}, {traceback.extract_tb(e.__traceback__)}"
+                )
+                raise
             finally:
                 request.app["websockets"].discard(wsr)
 
@@ -74,7 +85,7 @@ class WebsocketServer:
             raise Exception("already started")
 
         # start aiojobs scheduler
-        setup(app=self.app)
+        aiojobs.aiohttp.setup(app=self.app)
 
         self.started = True
 
@@ -90,34 +101,21 @@ class WebsocketServer:
         )
         await site.start()
 
-    async def serve(self) -> None:
-        await self.start()
-        names = sorted(str(s.name) for s in self.runner.sites)
-        print(
-            "======== Running on {} ========\n"
-            "(Press CTRL+C to quit)".format(", ".join(names))
-        )
-        try:
-            while True:
-                await asyncio.sleep(3600)  # sleep forever in 1 hour intervals
-        finally:
-            await self.runner.cleanup()
-
     async def __aenter__(self) -> WebsocketServer:
         await self.start()
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> WebsocketServer:
+        print(
+            f"__aexit__: exc_type={exc_type}, exc={exc}, tb={traceback.extract_tb(tb)}"
+        )
         await self.runner.cleanup()
+        if exc is not None:
+            raise exc
         return self
 
 
-RESPONSE_TIMEOUT = 2
-
-"""
-Really all we need here is a handler that says for message in ws, recieve()
-and a serverclient that is created before running that
-"""
+RESPONSE_TIMEOUT = 2  # TODO: make this configurable and part of the protocol
 
 
 class ServerClient:
@@ -126,6 +124,7 @@ class ServerClient:
         id: str,
         websocket: web.WebSocketResponse,
         incoming_request_handler: IncomingRequestHandler,
+        scheduler: aiojobs.Scheduler,
     ):
         self.id = id
         self.incoming_request_handler = incoming_request_handler
@@ -135,17 +134,21 @@ class ServerClient:
 
         self._base = WebsocketBase(
             websocket=websocket,
-            incoming_direction=Direction.NodeToServer,
+            incoming_direction=MessageDirection.NodeToServer,
             incoming_request_handler=incoming_request_handler,
+            scheduler=scheduler,
         )
 
-    def initialize(self):
-        self._base.initialize()
+    async def initialize(self):
+        await self._base.initialize()
 
     async def receive_messages(self):
         await self._base.recieve_messages()
 
     async def request(self, data: bytes) -> bytes:
-        return await self._base.request(
-            _contstruct_node_message(data, Direction.ServerToNode)
-        )
+        print(f"server client sending request: {data}")
+        node_msg = NodeMessage()
+        node_msg.fullRequest.CopyFrom(NodeMessageCompleteRequest(bytes=data))
+        node_msg.direction = MessageDirection.ServerToNode
+
+        return await self._base.request(node_msg)

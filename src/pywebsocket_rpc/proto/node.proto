@@ -1,20 +1,54 @@
 // generate: protoc -I=src/pywebsocket_rpc/proto --python_out=./src/pywebsocket_rpc/proto/gen src/pywebsocket_rpc/proto/node.proto
 
-syntax = "proto2";
+syntax = "proto3";
 
 package node;
 
 
-enum Direction {
-  ServerToNode = 1;
-  NodeToServer = 2;
+
+enum MessageDirection {
+  ServerToNode = 0;
+  NodeToServer = 1;
 }
 
 message NodeMessage {
-  required string id = 1;
-  required Direction direction = 2;
+  string id = 1;
+  MessageDirection direction = 2;
 
-  optional bytes bytes = 100;
-  // TODO: add headers 
-  // TODO: add server timeout?
+  oneof message_contents {
+    NodeMessageRequestHeader requestHeader = 100;
+    NodeMessageResponseHeader responseHeader = 101;
+    NodeMessagePacket packet = 102;
+    NodeMessageCompletion completion = 103;
+    NodeMessageCompleteRequest fullRequest = 104;
+    NodeMessageCompleteResponse fullResponse = 105;
+  }
+  // TODO: add timeout?
+}
+
+message NodeMessageCompletion {
+
+}
+
+message NodeMessageRequestHeader {
+  string url = 1;
+  string method = 2;
+}
+
+message NodeMessageResponseHeader {
+  int32 httpStatusCode = 1;
+}
+
+message NodeMessagePacket {
+  bytes bytes = 1;
+}
+
+message NodeMessageCompleteRequest {
+  NodeMessageRequestHeader header = 1;
+  bytes bytes = 2;
+}
+
+message NodeMessageCompleteResponse {
+  NodeMessageResponseHeader header = 1;
+  bytes bytes = 2;
 }
