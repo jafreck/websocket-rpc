@@ -19,7 +19,7 @@ message NodeMessage {
     NodeMessageRequestHeader requestHeader = 100;
     NodeMessageResponseHeader responseHeader = 101;
     NodeMessagePacket packet = 102;
-      NodeMessageCompletion completion = 103;
+    NodeMessageCompletion completion = 103;
     NodeMessageCompleteRequest fullRequest = 104;
     NodeMessageCompleteResponse fullResponse = 105;
   }
